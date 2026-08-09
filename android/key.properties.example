@@ -1,0 +1,4 @@
+storeFile=focus-flow-release.jks
+storePassword=replace-with-keystore-password
+keyAlias=focus-flow
+keyPassword=replace-with-key-password

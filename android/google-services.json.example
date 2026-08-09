@@ -1,0 +1,15 @@
+{
+  "project_info": {
+    "project_number": "replace-with-firebase-project-number",
+    "project_id": "replace-with-firebase-project-id",
+    "storage_bucket": "replace-with-firebase-storage-bucket"
+  },
+  "client": [{
+    "client_info": {
+      "mobilesdk_app_id": "replace-with-android-app-id",
+      "android_client_info": {"package_name": "com.focusflow.planner"}
+    },
+    "api_key": [{"current_key": "replace-with-firebase-api-key"}]
+  }],
+  "configuration_version": "1"
+}

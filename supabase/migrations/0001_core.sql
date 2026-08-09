@@ -78,9 +78,14 @@ alter table public.notes enable row level security;
 alter table public.user_preferences enable row level security;
 alter table public.device_tokens enable row level security;
 
+drop policy if exists "users manage their own tasks" on public.tasks;
 create policy "users manage their own tasks" on public.tasks for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+drop policy if exists "users manage their own notes" on public.notes;
 create policy "users manage their own notes" on public.notes for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+drop policy if exists "users manage their own preferences" on public.user_preferences;
 create policy "users manage their own preferences" on public.user_preferences for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+drop policy if exists "users manage their own device tokens" on public.device_tokens;
 create policy "users manage their own device tokens" on public.device_tokens for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
+drop policy if exists "authenticated users read news" on public.news_items;
 create policy "authenticated users read news" on public.news_items for select to authenticated using (true);

@@ -33,8 +33,8 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   tz_data.initializeTimeZones();
   final AppDatabase? database =
-      (Platform.isAndroid || Platform.isIOS || Platform.isWindows) ? await openAppDatabase() : null;
-  final NotificationScheduler scheduler = Platform.isAndroid || Platform.isIOS
+      (Platform.isAndroid || Platform.isWindows) ? await openAppDatabase() : null;
+  final NotificationScheduler scheduler = Platform.isAndroid
       ? FlutterNotificationScheduler()
       : const NoopNotificationScheduler();
   await scheduler.initialize();
@@ -139,8 +139,8 @@ class FocusFlowApp extends StatelessWidget {
       messaging.getInitialMessage().then((message) {
         if (message != null) _handleNotificationTap(message);
       });
-      if (Platform.isIOS) {
-        messaging.requestPermission(alert: true, badge: true, sound: true, provisional: false);
+      // iOS support removed
+        
       }
     } on Object {}
   }

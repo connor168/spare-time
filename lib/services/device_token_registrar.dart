@@ -59,6 +59,10 @@ class DeviceTokenRegistrar {
   StreamSubscription<String>? _subscription;
   String? _currentToken;
   Future<void> _refreshQueue = Future<void>.value();
+  final List<String> _pendingRevocations = [];
+  Timer? _retryTimer;
+  static const _retryDelay = Duration(minutes: 5);
+  static const _maxRetries = 12;
 
   Future<void> start() async {
     final token = await source.requestToken();
@@ -69,12 +73,55 @@ class DeviceTokenRegistrar {
       _refreshQueue = _refreshQueue
           .then((_) => _replaceToken(token))
           .catchError((Object _) {});
+
+  void _scheduleRetry() {
+    if (_retryTimer?.isActive ?? false) return;
+    if (_pendingRevocations.isEmpty) return;
+    _retryTimer?.cancel();
+    _retryTimer = Timer(_retryDelay, _processRetryQueue);
+  }
+
+  Future<void> _processRetryQueue() async {
+    if (_pendingRevocations.isEmpty || supabase.session == null) return;
+    final batch = List<String>.from(_pendingRevocations);
+    _pendingRevocations.clear();
+    var remaining = <String>[];
+    for (final token in batch) {
+      try {
+        await supabase.revokeDeviceToken(token);
+      } on Object {
+        remaining.add(token);
+      }
+    }
+    if (remaining.isNotEmpty) {
+      _pendingRevocations.addAll(remaining);
+      if (_pendingRevocations.length > _maxRetries * batch.length) {
+        _pendingRevocations.clear();
+        return;
+      }
+      _scheduleRetry();
+    }
+  }
     });
   }
 
-  Future<void> dispose() => _subscription?.cancel() ?? Future<void>.value();
+  Future<void> dispose() async {
+    await _subscription?.cancel();
+    _retryTimer?.cancel();
+  }
 
   Future<void> revoke() async {
+    await dispose();
+    final token = _currentToken;
+    _currentToken = null;
+    if (token == null || token.isEmpty || supabase.session == null) return;
+    try {
+      await supabase.revokeDeviceToken(token);
+    } on Object {
+      _pendingRevocations.add(token);
+      _scheduleRetry();
+    }
+  }
     await dispose();
     final token = _currentToken;
     _currentToken = null;

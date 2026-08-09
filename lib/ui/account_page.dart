@@ -1,14 +1,26 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 
 import '../services/auth_controller.dart';
 
 class AccountPage extends StatefulWidget {
   const AccountPage(
-      {super.key, required this.controller, this.onSync, this.onSignOut});
+      {super.key,
+      required this.controller,
+      this.onSync,
+      this.onSignOut,
+      this.onImportGuestData,
+      this.onCountGuestData,
+      this.onResolveConflict});
 
   final AuthController controller;
-  final Future<void> Function()? onSync;
+  final Future<SyncReport> Function()? onSync;
   final Future<void> Function()? onSignOut;
+  final VoidCallback? onImportGuestData;
+  final Future<GuestDataCount> Function()? onCountGuestData;
+  final Future<ConflictChoice?> Function(String entityType, String title,
+      String localSummary, String remoteSummary)? onResolveConflict;
 
   @override
   State<AccountPage> createState() => _AccountPageState();
@@ -47,6 +59,107 @@ class _AccountPageState extends State<AccountPage> {
       return _confirmation(context);
     }
     return _form(context, controller);
+  }
+
+  Widget _signedIn(BuildContext context, AuthController controller) {
+    final id = controller.session?.userId ?? '';
+    return ListView(padding: const EdgeInsets.all(24), children: [
+      Text('Account', style: Theme.of(context).textTheme.headlineSmall),
+      const SizedBox(height: 8),
+      Text('Signed in as $id'),
+      const SizedBox(height: 24),
+      _buildSyncSection(context),
+      const SizedBox(height: 24),
+      _buildDataSection(context),
+    ]);
+  }
+
+  Widget _buildSyncSection(BuildContext context) {
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text('Sync',
+          style: Theme.of(context)
+              .textTheme
+              .titleMedium
+              ?.copyWith(fontWeight: FontWeight.w600)),
+      const SizedBox(height: 12),
+      FilledButton.icon(
+          key: const Key('account-sync-button'),
+          onPressed: () => _syncWithConflictUI(context),
+          icon: const Icon(Icons.sync),
+          label: const Text('Sync now')),
+      const SizedBox(height: 8),
+      _guestImportBanner(context),
+    ]);
+  }
+
+  Widget _guestImportBanner(BuildContext context) {
+    return FutureBuilder<GuestDataCount>(
+      future: _countGuestData(),
+      builder: (context, snapshot) {
+        final count = snapshot.data;
+        if (count == null ||
+            (count.taskCount == 0 && count.noteCount == 0)) {
+          return const SizedBox.shrink();
+        }
+        return Padding(
+          padding: const EdgeInsets.only(top: 12),
+          child: Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: const Color(0xffdff3ed),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Row(children: [
+              const Icon(Icons.folder_open, color: Color(0xff157a6e)),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'You have ${count.taskCount} task(s) and ${count.noteCount} note(s) from guest mode. Import them?',
+                  style: const TextStyle(fontSize: 13),
+                ),
+              ),
+              TextButton(
+                onPressed: () => _importGuestData(context),
+                child: const Text('Import'),
+              ),
+            ]),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildDataSection(BuildContext context) {
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text('Data',
+          style: Theme.of(context)
+              .textTheme
+              .titleMedium
+              ?.copyWith(fontWeight: FontWeight.w600)),
+      const SizedBox(height: 12),
+      OutlinedButton.icon(
+        key: const Key('account-export-button'),
+        onPressed: () => _exportData(context),
+        icon: const Icon(Icons.download),
+        label: const Text('Export all data (JSON)'),
+      ),
+      const SizedBox(height: 8),
+      OutlinedButton.icon(
+          key: const Key('account-signout-button'),
+          onPressed: widget.onSignOut ?? controller.signOut,
+          icon: const Icon(Icons.logout),
+          label: const Text('Sign out')),
+      const SizedBox(height: 16),
+      const Divider(),
+      const SizedBox(height: 8),
+      OutlinedButton.icon(
+        key: const Key('account-delete-button'),
+        onPressed: () => _confirmDeleteAccount(context),
+        icon: const Icon(Icons.delete_forever, color: Colors.red),
+        label:
+            const Text('Delete account', style: TextStyle(color: Colors.red)),
+      ),
+    ]);
   }
 
   Widget _form(BuildContext context, AuthController controller) {
@@ -111,25 +224,159 @@ class _AccountPageState extends State<AccountPage> {
             ])));
   }
 
-  Widget _signedIn(BuildContext context, AuthController controller) {
-    final id = controller.session?.userId ?? '';
-    return ListView(padding: const EdgeInsets.all(24), children: [
-      Text('Account', style: Theme.of(context).textTheme.headlineSmall),
-      const SizedBox(height: 8),
-      Text('Signed in as $id'),
-      const SizedBox(height: 24),
-      FilledButton.icon(
-          key: const Key('account-sync-button'),
-          onPressed: widget.onSync,
-          icon: const Icon(Icons.sync),
-          label: const Text('Sync now')),
-      const SizedBox(height: 8),
-      OutlinedButton.icon(
-          key: const Key('account-signout-button'),
-          onPressed: widget.onSignOut ?? controller.signOut,
-          icon: const Icon(Icons.logout),
-          label: const Text('Sign out')),
-    ]);
+  Future<void> _syncWithConflictUI(BuildContext context) async {
+    try {
+      final report = await widget.onSync?.call();
+      if (report == null || !mounted) return;
+      final message = report.conflicts > 0
+          ? 'Sync complete: pulled ${report.pulled}, pushed ${report.pushed}, ${report.conflicts} conflict(s). Tap to review.'
+          : 'Sync complete: pulled ${report.pulled}, pushed ${report.pushed}.';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(message),
+        action: report.conflicts > 0
+            ? SnackBarAction(
+                label: 'Review',
+                onPressed: () => _showConflictReview(context, report),
+              )
+            : null,
+      ));
+    } on Object catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Sync failed: $error')));
+      }
+    }
+  }
+
+  Future<void> _showConflictReview(
+      BuildContext context, SyncReport report) async {
+    // Conflict resolution is driven by the sync engine reporting
+    // individual conflicts. The widget callbacks handle each one.
+    if (!mounted) return;
+    await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Sync conflicts'),
+        content: Text(
+            '${report.conflicts} item(s) were modified on both devices.\n\n'
+            'The cloud version was kept for each conflicting item. '
+            'Your local version is still available in the app.\n\n'
+            'To resolve, review the items and manually merge changes.'),
+        actions: [
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Got it')),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _exportData(BuildContext context) async {
+    try {
+      final data = await widget.controller.client.exportMyData();
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Export ready'),
+          content: SizedBox(
+            width: 400,
+            height: 300,
+            child: SingleChildScrollView(
+              child: SelectableText(
+                const JsonEncoder.withIndent('  ').convert(data),
+                style:
+                    const TextStyle(fontSize: 12, fontFamily: 'monospace'),
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Close')),
+          ],
+        ),
+      );
+    } on Object catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Export failed: $error')));
+    }
+  }
+
+  Future<void> _confirmDeleteAccount(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete account?'),
+        content: const Text(
+          'This action is permanent. All your tasks, notes, preferences, '
+          'and device registrations will be deleted from the cloud. '
+          'Local data will remain on this device until you sign out or '
+          'clear app data.',
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Delete forever'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      await widget.controller.client.deleteMyAccount();
+      await widget.controller.signOut();
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('Account deleted.')));
+      }
+    } on Object catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Deletion failed: $error')));
+    }
+  }
+
+  Future<void> _importGuestData(BuildContext context) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Import guest data'),
+        content: const Text(
+          'This will merge your guest tasks and notes into your account. '
+          'Existing items with the same ID will be skipped.',
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Import')),
+        ],
+      ),
+    );
+    if (result != true || !mounted) return;
+    widget.onImportGuestData?.call();
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Guest data imported.')));
+      setState(() {});
+    }
+  }
+
+  Future<GuestDataCount> _countGuestData() async {
+    try {
+      return await widget.onCountGuestData?.call() ??
+          const GuestDataCount(taskCount: 0, noteCount: 0);
+    } on Object {
+      return const GuestDataCount(taskCount: 0, noteCount: 0);
+    }
   }
 
   Future<void> _submit(AuthController controller) async {
@@ -148,3 +395,76 @@ class _AccountPageState extends State<AccountPage> {
     }
   }
 }
+
+class GuestDataCount {
+  const GuestDataCount({required this.taskCount, required this.noteCount});
+  final int taskCount;
+  final int noteCount;
+}
+
+class SyncReport {
+  const SyncReport(
+      {required this.pulled, required this.pushed, required this.conflicts});
+  final int pulled;
+  final int pushed;
+  final int conflicts;
+}
+
+class ConflictResolver {
+  static Future<ConflictChoice?> show(
+    BuildContext context, {
+    required String entityType,
+    required String title,
+    required String localSummary,
+    required String remoteSummary,
+  }) {
+    return showDialog<ConflictChoice>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Sync conflict: $entityType'),
+        content: SizedBox(
+          width: 420,
+          child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('"$title" was changed on both devices.',
+                    style: const TextStyle(fontWeight: FontWeight.w600)),
+                const SizedBox(height: 14),
+                Text('This device',
+                    style: TextStyle(
+                        color: Theme.of(ctx).colorScheme.primary,
+                        fontWeight: FontWeight.w600)),
+                const SizedBox(height: 4),
+                Text(localSummary,
+                    style: const TextStyle(
+                        fontSize: 13, color: Colors.black54)),
+                const SizedBox(height: 12),
+                const Text('Cloud',
+                    style: TextStyle(fontWeight: FontWeight.w600)),
+                const SizedBox(height: 4),
+                Text(remoteSummary,
+                    style: const TextStyle(
+                        fontSize: 13, color: Colors.black54)),
+              ]),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, ConflictChoice.keepLocal),
+            child: const Text('Keep mine'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, ConflictChoice.takeRemote),
+            child: const Text('Take cloud'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, ConflictChoice.keepBoth),
+            child: const Text('Keep both'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+enum ConflictChoice { keepLocal, takeRemote, keepBoth }

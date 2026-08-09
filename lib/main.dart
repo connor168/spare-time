@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 import 'package:timezone/data/latest.dart' as tz_data;
@@ -23,6 +24,7 @@ import 'services/auth_session_store.dart';
 import 'services/device_token_registrar.dart';
 import 'services/supabase_rest_client.dart';
 import 'services/sync_engine.dart';
+import 'services/deep_link_handler.dart';
 import 'ui/account_page.dart';
 import 'ui/add_task_dialog.dart';
 import 'ui/window_class.dart';
@@ -31,7 +33,7 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   tz_data.initializeTimeZones();
   final AppDatabase? database =
-      Platform.isAndroid || Platform.isIOS ? await openAppDatabase() : null;
+      (Platform.isAndroid || Platform.isIOS || Platform.isWindows) ? await openAppDatabase() : null;
   final NotificationScheduler scheduler = Platform.isAndroid || Platform.isIOS
       ? FlutterNotificationScheduler()
       : const NoopNotificationScheduler();
@@ -113,6 +115,85 @@ class FocusFlowApp extends StatelessWidget {
   final NotificationScheduler? scheduler;
   final AppDatabase? database;
 
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      final pending = _deepLinkHandler.consumePending();
+      if (pending != null) _navigateDeepLink(pending);
+    }
+  }
+
+  void _setupDeepLinks() {
+    final pending = _deepLinkHandler.consumePending();
+    if (pending != null) _navigateDeepLink(pending);
+    _deepLinkSub = _deepLinkHandler.events.listen(_navigateDeepLink);
+  }
+
+  void _setupFirebaseMessaging() {
+    if (!Platform.isAndroid && !Platform.isIOS) return;
+    try {
+      final messaging = FirebaseMessaging.instance;
+      _fcmForegroundSub = FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
+      FirebaseMessaging.onMessageOpenedApp.listen(_handleNotificationTap);
+      messaging.getInitialMessage().then((message) {
+        if (message != null) _handleNotificationTap(message);
+      });
+      if (Platform.isIOS) {
+        messaging.requestPermission(alert: true, badge: true, sound: true, provisional: false);
+      }
+    } on Object {}
+  }
+
+  void _handleForegroundMessage(RemoteMessage message) {
+    final data = message.data;
+    if (data['deep_link'] is String) _deepLinkHandler.handleUri(data['deep_link'] as String);
+  }
+
+  void _handleNotificationTap(RemoteMessage message) {
+    final data = message.data;
+    if (data['deep_link'] is String) _deepLinkHandler.handleUri(data['deep_link'] as String);
+  }
+
+  void _navigateDeepLink(DeepLinkEvent event) {
+    if (!mounted) return;
+    if (event.route == DeepLinkRoute.newsDaily) setState(() => selectedIndex = 1);
+  }
+
+  Future<DeviceTokenSource> _detectPushSource() async {
+    if (Platform.isAndroid) {
+      try {
+        final hasGms = await FirebaseMessaging.instance.getToken().then((_) => true).catchError((_) => false);
+        if (!hasGms) return HuaweiDeviceTokenSource();
+      } on Object { return HuaweiDeviceTokenSource(); }
+    }
+    return FirebaseDeviceTokenSource();
+  }
+
+  Future<void> _importGuestData() async {
+    final currentOwner = widget.authController?.session?.userId;
+    if (currentOwner == null) return;
+    final origOwner = repository.ownerUserId;
+    try {
+      repository.setOwner(null);
+      noteRepository.setOwner(null);
+      final guestTasks = await repository.loadTasks(includeDeleted: false);
+      final guestNotes = await noteRepository.loadNotes(includeDeleted: false);
+      repository.setOwner(currentOwner);
+      noteRepository.setOwner(currentOwner);
+      for (final task in guestTasks) { await repository.saveTask(task); }
+      for (final note in guestNotes) { await noteRepository.saveNote(note); }
+      await _loadData(generation: _authGeneration);
+      _guestTaskCount = 0;
+      _guestNoteCount = 0;
+      if (mounted) setState(() {});
+    } on Object {
+      repository.setOwner(origOwner);
+      noteRepository.setOwner(origOwner);
+      rethrow;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -169,26 +250,26 @@ class FocusFlowShell extends StatefulWidget {
   State<FocusFlowShell> createState() => _FocusFlowShellState();
 }
 
-class _FocusFlowShellState extends State<FocusFlowShell> {
+class _FocusFlowShellState extends State<FocusFlowShell> with WidgetsBindingObserver {
   int selectedIndex = 0;
   late final TaskRepository repository = widget.repository ??
       InMemoryTaskRepository(seed: [
         PlannerTask(
             id: 'task-1',
-            title: '深度工作：产品规格',
+            title: '濞ｅ崬瀹冲銉ょ稊閿涙矮楠囬崫浣筋潐閺?,
             startAt: _todayAt(9).toUtc(),
             endAt: _todayAt(10, 30).toUtc(),
             timeZoneId: 'Asia/Tokyo',
             reminderMinutes: 15),
         PlannerTask(
             id: 'task-2',
-            title: '午间散步',
+            title: '閸楀牓妫块弫锝嗩劄',
             startAt: _todayAt(12, 30).toUtc(),
             endAt: _todayAt(13).toUtc(),
             timeZoneId: 'Asia/Tokyo'),
         PlannerTask(
             id: 'task-3',
-            title: '整理今日笔记',
+            title: '閺佸鎮婃禒濠冩）缁楁棁顔?,
             startAt: _todayAt(18).toUtc(),
             endAt: _todayAt(18, 30).toUtc(),
             timeZoneId: 'Asia/Tokyo'),
@@ -197,14 +278,14 @@ class _FocusFlowShellState extends State<FocusFlowShell> {
       InMemoryNoteRepository(seed: [
         KnowledgeNote(
             id: 'note-1',
-            title: '把复杂问题拆成可验证的假设',
-            bodyMarkdown: '今天在设计资讯聚合时，先定义热点，再选择数据源。',
+            title: '閹跺﹤顦查弶鍌炴６妫版ɑ濯堕幋鎰讲妤犲矁鐦夐惃鍕海鐠?,
+            bodyMarkdown: '娴犲﹤銇夐崷銊啎鐠伮ょカ鐠侇垵浠涢崥鍫熸閿涘苯鍘涚€规矮绠熼悜顓犲仯閿涘苯鍟€闁瀚ㄩ弫鐗堝祦濠ф劑鈧?,
             createdAt: DateTime.now(),
             updatedAt: DateTime.now()),
         KnowledgeNote(
             id: 'note-2',
-            title: '阅读记录：Agent 工作流',
-            bodyMarkdown: '工具调用的边界决定了系统的可靠性。',
+            title: '闂冨懓顕扮拋鏉跨秿閿涙gent 瀹搞儰缍斿ù?,
+            bodyMarkdown: '瀹搞儱鍙跨拫鍐暏閻ㄥ嫯绔熼悾灞藉枀鐎规矮绨＄化鑽ょ埠閻ㄥ嫬褰查棃鐘斥偓褋鈧?,
             createdAt: DateTime.now().subtract(const Duration(days: 1)),
             updatedAt: DateTime.now().subtract(const Duration(days: 1))),
       ]);
@@ -217,10 +298,16 @@ class _FocusFlowShellState extends State<FocusFlowShell> {
   int _authGeneration = 0;
   bool _isSyncing = false;
   Future<void> _notificationQueue = Future<void>.value();
+  final DeepLinkHandler _deepLinkHandler = DeepLinkHandler();
+  StreamSubscription<RemoteMessage>? _fcmForegroundSub;
+  StreamSubscription<DeepLinkEvent>? _deepLinkSub;
+  int _guestTaskCount = 0;
+  int _guestNoteCount = 0;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     widget.authController?.addListener(_onAuthChanged);
     if (widget.repository == null && widget.noteRepository == null) {
       tasks.addAll(_demoTasks());
@@ -236,7 +323,9 @@ class _FocusFlowShellState extends State<FocusFlowShell> {
       unawaited(_loadData(generation: _authGeneration));
     }
     if (widget.authController?.status == AuthStatus.signedIn) {
-      unawaited(_ensureTokenRegistration(_authGeneration));
+    _setupDeepLinks();
+    _setupFirebaseMessaging();
+    unawaited(_ensureTokenRegistration(_authGeneration));
     }
   }
 
@@ -271,6 +360,10 @@ class _FocusFlowShellState extends State<FocusFlowShell> {
     tokenRegistrar?.dispose();
     widget.authController?.dispose();
     widget.database?.close();
+    WidgetsBinding.instance.removeObserver(this);
+    _deepLinkHandler.dispose();
+    _deepLinkSub?.cancel();
+    _fcmForegroundSub?.cancel();
     super.dispose();
   }
 
@@ -309,9 +402,10 @@ class _FocusFlowShellState extends State<FocusFlowShell> {
           widget.authController?.status != AuthStatus.signedIn) {
         return;
       }
+      final source = await _detectPushSource();
       tokenRegistrar ??= DeviceTokenRegistrar(
         supabase: client!,
-        source: FirebaseDeviceTokenSource(),
+        source: source,
         platform: Platform.isIOS ? 'ios' : 'android',
       );
       await tokenRegistrar!.start();
@@ -340,19 +434,19 @@ class _FocusFlowShellState extends State<FocusFlowShell> {
                 NavigationDestination(
                     icon: Icon(Icons.today_outlined),
                     selectedIcon: Icon(Icons.today),
-                    label: '今日'),
+                    label: '娴犲﹥妫?),
                 NavigationDestination(
                     icon: Icon(Icons.auto_awesome_outlined),
                     selectedIcon: Icon(Icons.auto_awesome),
-                    label: 'AI 资讯'),
+                    label: 'AI 鐠у嫯顔?),
                 NavigationDestination(
                     icon: Icon(Icons.menu_book_outlined),
                     selectedIcon: Icon(Icons.menu_book),
-                    label: '知识库'),
+                    label: '閻儴鐦戞惔?),
                 NavigationDestination(
                     icon: Icon(Icons.person_outline),
                     selectedIcon: Icon(Icons.person),
-                    label: '账号'),
+                    label: '鐠愶箑褰?),
               ],
             ),
           );
@@ -377,19 +471,19 @@ class _FocusFlowShellState extends State<FocusFlowShell> {
                     NavigationRailDestination(
                         icon: Icon(Icons.today_outlined),
                         selectedIcon: Icon(Icons.today),
-                        label: Text('今日')),
+                        label: Text('娴犲﹥妫?)),
                     NavigationRailDestination(
                         icon: Icon(Icons.auto_awesome_outlined),
                         selectedIcon: Icon(Icons.auto_awesome),
-                        label: Text('AI 资讯')),
+                        label: Text('AI 鐠у嫯顔?)),
                     NavigationRailDestination(
                         icon: Icon(Icons.menu_book_outlined),
                         selectedIcon: Icon(Icons.menu_book),
-                        label: Text('知识库')),
+                        label: Text('閻儴鐦戞惔?)),
                     NavigationRailDestination(
                         icon: Icon(Icons.person_outline),
                         selectedIcon: Icon(Icons.person),
-                        label: Text('账号')),
+                        label: Text('鐠愶箑褰?)),
                   ],
                 ),
                 const VerticalDivider(width: 1),
@@ -420,6 +514,8 @@ class _FocusFlowShellState extends State<FocusFlowShell> {
                 controller: controller,
                 onSync: _syncNow,
                 onSignOut: _signOut,
+                onImportGuestData: _importGuestData,
+                onCountGuestData: () async => GuestDataCount(taskCount: _guestTaskCount, noteCount: _guestNoteCount),
               );
       default:
         return _TodayView(
@@ -476,7 +572,7 @@ class _FocusFlowShellState extends State<FocusFlowShell> {
     );
   }
 
-  Future<void> _syncNow() async {
+  Future<SyncReport> _syncNow() async {
     final client = widget.cloudClient;
     if (client == null || client.session == null || _isSyncing) return;
     _isSyncing = true;
@@ -485,21 +581,21 @@ class _FocusFlowShellState extends State<FocusFlowShell> {
       final report = await SyncEngine(
               client: client, tasks: repository, notes: noteRepository)
           .sync();
-      await _loadData(generation: generation);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text(
-                '同步完成：上传 ${report.pushed}，下载 ${report.pulled}，冲突 ${report.conflicts}')));
-      }
+      
+      return SyncReport(
+          pulled: report.pulled,
+          pushed: report.pushed,
+          conflicts: report.conflicts);
     } on Object catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('同步失败：$error')));
+            .showSnackBar(SnackBar(content: Text('Sync failed: ')));
       }
+      return const SyncReport(pulled: 0, pushed: 0, conflicts: 0);
     } finally {
       _isSyncing = false;
     }
-  }
+  }}
 
   Future<void> _signOut() async {
     final registrar = tokenRegistrar;
@@ -522,7 +618,7 @@ class _CloudUnavailableView extends StatelessWidget {
   Widget build(BuildContext context) => const Center(
       child: Padding(
           padding: EdgeInsets.all(24),
-          child: Text('云同步尚未配置。请在构建时提供 SUPABASE_URL 和 SUPABASE_ANON_KEY。',
+          child: Text('娴滄垵鎮撳銉ョ毣閺堫亪鍘ょ純顔衡偓鍌濐嚞閸︺劍鐎鐑樻閹绘劒绶?SUPABASE_URL 閸?SUPABASE_ANON_KEY閵?,
               textAlign: TextAlign.center)));
 }
 
@@ -542,6 +638,7 @@ class _NoteDialogState extends State<_NoteDialog> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     titleController = TextEditingController(text: widget.original?.title);
     bodyController = TextEditingController(text: widget.original?.bodyMarkdown);
   }
@@ -550,13 +647,17 @@ class _NoteDialogState extends State<_NoteDialog> {
   void dispose() {
     titleController.dispose();
     bodyController.dispose();
+    WidgetsBinding.instance.removeObserver(this);
+    _deepLinkHandler.dispose();
+    _deepLinkSub?.cancel();
+    _fcmForegroundSub?.cancel();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text(widget.original == null ? '新建笔记' : '编辑笔记'),
+      title: Text(widget.original == null ? '閺傛澘缂撶粭鏃囶唶' : '缂傛牞绶粭鏃囶唶'),
       content: SizedBox(
         width: 480,
         child: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -564,19 +665,19 @@ class _NoteDialogState extends State<_NoteDialog> {
               key: const Key('note-title-field'),
               controller: titleController,
               autofocus: true,
-              decoration: const InputDecoration(labelText: '标题')),
+              decoration: const InputDecoration(labelText: '閺嶅洭顣?)),
           const SizedBox(height: 12),
           TextField(
               key: const Key('note-body-field'),
               controller: bodyController,
               minLines: 5,
               maxLines: 10,
-              decoration: const InputDecoration(labelText: '内容')),
+              decoration: const InputDecoration(labelText: '閸愬懎顔?)),
         ]),
       ),
       actions: [
         TextButton(
-            onPressed: () => Navigator.pop(context), child: const Text('取消')),
+            onPressed: () => Navigator.pop(context), child: const Text('閸欐牗绉?)),
         FilledButton(
           onPressed: () {
             final title = titleController.text.trim();
@@ -594,7 +695,7 @@ class _NoteDialogState extends State<_NoteDialog> {
               ),
             );
           },
-          child: const Text('保存'),
+          child: const Text('娣囨繂鐡?),
         ),
       ],
     );
@@ -617,7 +718,7 @@ class _TodayView extends StatelessWidget {
   Widget build(BuildContext context) {
     final completed = tasks.where((task) => task.isCompleted).length;
     final now = DateTime.now();
-    const weekdays = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+    const weekdays = ['閸涖劋绔?, '閸涖劋绨?, '閸涖劋绗?, '閸涖劌娲?, '閸涖劋绨?, '閸涖劌鍙?, '閸涖劍妫?];
     return SingleChildScrollView(
       padding: EdgeInsets.fromLTRB(isWide ? 42 : 24, 28, 24, 40),
       child: ConstrainedBox(
@@ -629,7 +730,7 @@ class _TodayView extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                   Text(
-                      '${weekdays[now.weekday - 1]}，${now.month} 月 ${now.day} 日',
+                      '${weekdays[now.weekday - 1]}閿?{now.month} 閺?${now.day} 閺?,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context)
@@ -637,7 +738,7 @@ class _TodayView extends StatelessWidget {
                           .labelLarge
                           ?.copyWith(color: Colors.black54)),
                   const SizedBox(height: 6),
-                  Text('把今天安排好',
+                  Text('閹跺﹣绮栨径鈺佺暔閹烘帒銈?,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context)
@@ -646,7 +747,7 @@ class _TodayView extends StatelessWidget {
                           ?.copyWith(fontWeight: FontWeight.w700)),
                 ])),
             IconButton(
-                tooltip: '添加任务',
+                tooltip: '濞ｈ濮炴禒璇插',
                 onPressed: onAdd,
                 icon: const Icon(Icons.add_circle_outline, size: 30)),
           ]),
@@ -661,7 +762,7 @@ class _TodayView extends StatelessWidget {
             ],
           ]),
           const SizedBox(height: 30),
-          Text('今日时间轴',
+          Text('娴犲﹥妫╅弮鍫曟？鏉?,
               style: Theme.of(context)
                   .textTheme
                   .titleLarge
@@ -702,7 +803,7 @@ class _ProgressPanel extends StatelessWidget {
         Expanded(
             child:
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('$completed / $total 完成',
+          Text('$completed / $total 鐎瑰本鍨?,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: Theme.of(context)
@@ -710,7 +811,7 @@ class _ProgressPanel extends StatelessWidget {
                   .titleMedium
                   ?.copyWith(fontWeight: FontWeight.w700)),
           const SizedBox(height: 4),
-          const Text('保持专注，逐项推进',
+          const Text('娣囨繃瀵旀稉鎾存暈閿涘矂鈧劙銆嶉幒銊ㄧ箻',
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(color: Colors.black54)),
@@ -734,7 +835,7 @@ class _FocusPanel extends StatelessWidget {
         SizedBox(width: 12),
         Expanded(
             child:
-                Text('下一条提醒\n09:00 深度工作：产品规格', style: TextStyle(height: 1.5))),
+                Text('娑撳绔撮弶鈩冨絹闁辨妰n09:00 濞ｅ崬瀹冲銉ょ稊閿涙矮楠囬崫浣筋潐閺?, style: TextStyle(height: 1.5))),
       ]),
     );
   }
@@ -819,7 +920,7 @@ class _NewsViewState extends State<_NewsView> {
     return _digestList(context, const [
       NewsItem(
           repositoryFullName: 'open-source/agent-patterns',
-          title: '以更低成本构建可靠的 Agent 工作流',
+          title: '娴犮儲娲挎担搴㈠灇閺堫剚鐎鍝勫讲闂堢姷娈?Agent 瀹搞儰缍斿ù?,
           summary: '',
           sourceUrl: 'https://github.com/open-source/agent-patterns',
           tags: ['agent'],
@@ -828,7 +929,7 @@ class _NewsViewState extends State<_NewsView> {
           score: 0),
       NewsItem(
           repositoryFullName: 'community/local-models',
-          title: '本周值得关注的本地模型工具',
+          title: '閺堫剙鎳嗛崐鐓庣繁閸忚櫕鏁為惃鍕拱閸︾増膩閸ㄥ浼愰崗?,
           summary: '',
           sourceUrl: 'https://github.com/community/local-models',
           tags: ['llm'],
@@ -844,19 +945,19 @@ class _NewsViewState extends State<_NewsView> {
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 1120),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('AI 资讯',
+          Text('AI 鐠у嫯顔?,
               style: Theme.of(context)
                   .textTheme
                   .headlineMedium
                   ?.copyWith(fontWeight: FontWeight.w700)),
           const SizedBox(height: 6),
-          const Text('每日从 GitHub 精选项目动态',
+          const Text('濮ｅ繑妫╂禒?GitHub 缁箖鈧銆嶉惄顔煎З閹?,
               style: TextStyle(color: Colors.black54)),
           const SizedBox(height: 24),
           ...items.map((item) => _NewsItem(
               title: item.title,
               repo: item.repositoryFullName,
-              meta: '★ ${item.stars}',
+              meta: '閳?${item.stars}',
               url: item.sourceUrl,
               summary: item.summary)),
         ]),
@@ -865,9 +966,9 @@ class _NewsViewState extends State<_NewsView> {
   }
 
   Widget _digestError(BuildContext context) =>
-      _digestMessage('资讯暂时不可用，稍后重试。', Icons.cloud_off);
+      _digestMessage('鐠у嫯顔嗛弳鍌涙娑撳秴褰查悽顭掔礉缁嬪秴鎮楅柌宥堢槸閵?, Icons.cloud_off);
   Widget _digestEmpty(BuildContext context) =>
-      _digestMessage('暂无可用资讯。', Icons.inbox_outlined);
+      _digestMessage('閺嗗倹妫ら崣顖滄暏鐠у嫯顔嗛妴?, Icons.inbox_outlined);
   Widget _digestMessage(String message, IconData icon) => Center(
           child: Column(mainAxisSize: MainAxisSize.min, children: [
         Icon(icon, size: 36),
@@ -917,7 +1018,7 @@ class _NewsItem extends StatelessWidget {
           Text(meta, style: const TextStyle(color: Colors.black54)),
         ])),
         IconButton(
-            tooltip: 'GitHub 链接',
+            tooltip: 'GitHub 闁剧偓甯?,
             onPressed: () {},
             icon: const Icon(Icons.open_in_new, size: 20)),
       ]),
@@ -948,6 +1049,10 @@ class _KnowledgeViewState extends State<_KnowledgeView> {
   @override
   void dispose() {
     searchController.dispose();
+    WidgetsBinding.instance.removeObserver(this);
+    _deepLinkHandler.dispose();
+    _deepLinkSub?.cancel();
+    _fcmForegroundSub?.cancel();
     super.dispose();
   }
 
@@ -966,13 +1071,13 @@ class _KnowledgeViewState extends State<_KnowledgeView> {
         constraints: const BoxConstraints(maxWidth: 1120),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-            Text('知识库',
+            Text('閻儴鐦戞惔?,
                 style: Theme.of(context)
                     .textTheme
                     .headlineMedium
                     ?.copyWith(fontWeight: FontWeight.w700)),
             IconButton(
-                tooltip: '新建笔记',
+                tooltip: '閺傛澘缂撶粭鏃囶唶',
                 onPressed: widget.onAdd,
                 icon: const Icon(Icons.note_add_outlined, size: 28)),
           ]),
@@ -982,11 +1087,11 @@ class _KnowledgeViewState extends State<_KnowledgeView> {
             onChanged: (value) => setState(() => query = value),
             decoration: InputDecoration(
               prefixIcon: const Icon(Icons.search),
-              hintText: '搜索笔记',
+              hintText: '閹兼粎鍌ㄧ粭鏃囶唶',
               suffixIcon: query.isEmpty
                   ? null
                   : IconButton(
-                      tooltip: '清除搜索',
+                      tooltip: '濞撳懘娅庨幖婊呭偍',
                       onPressed: () {
                         searchController.clear();
                         setState(() => query = '');
@@ -999,7 +1104,7 @@ class _KnowledgeViewState extends State<_KnowledgeView> {
             const Padding(
                 padding: EdgeInsets.symmetric(vertical: 48),
                 child: Center(
-                    child: Text('没有找到相关笔记',
+                    child: Text('濞屸剝婀侀幍鎯у煂閻╃鍙х粭鏃囶唶',
                         style: TextStyle(color: Colors.black54))))
           else
             ...visibleNotes.map((note) => ListTile(
@@ -1022,7 +1127,7 @@ class _KnowledgeViewState extends State<_KnowledgeView> {
     if (value.year == now.year &&
         value.month == now.month &&
         value.day == now.day) {
-      return '今天';
+      return '娴犲﹤銇?;
     }
     return '${value.month}/${value.day}';
   }

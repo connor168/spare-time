@@ -211,6 +211,27 @@ class SupabaseRestClient {
     });
   }
 
+
+  Future<Map<String, dynamic>> exportMyData() async {
+    if (_session == null) {
+      throw StateError('Sign in before exporting data.');
+    }
+    final response = await _send('POST', '/rest/v1/rpc/export_my_data', null);
+    final json = _decode(response);
+    if (json is! Map<String, dynamic>) {
+      throw const FormatException('Export response must be an object.');
+    }
+    return json;
+  }
+
+  Future<void> deleteMyAccount() async {
+    if (_session == null) {
+      throw StateError('Sign in before deleting account.');
+    }
+    await _send('POST', '/rest/v1/rpc/delete_my_account', null);
+    _session = null;
+  }
+
   Future<List<Map<String, dynamic>>> fetchNotes() async {
     return _fetchAll('notes');
   }

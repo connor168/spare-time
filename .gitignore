@@ -26,3 +26,6 @@ ios/Runner/Runner.entitlements
 
 .tool-state/
 /.git/
+
+android/focus-flow-upload.jks
+android/key.properties

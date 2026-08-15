@@ -16,7 +16,7 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
   DateTime date = DateTime.now();
   late TimeOfDay startTime;
   late TimeOfDay endTime;
-  int reminderMinutes = 15;
+  int reminderMinutes = 5;
   int priority = 2;
   String? errorText;
 
@@ -93,7 +93,7 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
                 DropdownMenuItem(value: 30, child: Text('提前 30 分钟')),
               ],
               onChanged: (value) =>
-                  setState(() => reminderMinutes = value ?? 15),
+                  setState(() => reminderMinutes = value ?? 5),
             ),
             const SizedBox(height: 14),
             SegmentedButton<int>(
@@ -170,7 +170,7 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
         description: descriptionController.text.trim(),
         startAt: start.toUtc(),
         endAt: end.toUtc(),
-        timeZoneId: 'Asia/Tokyo',
+        timeZoneId: 'Asia/Shanghai',
         reminderMinutes: reminderMinutes,
         priority: priority,
       ),

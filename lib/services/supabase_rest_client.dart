@@ -211,17 +211,12 @@ class SupabaseRestClient {
     });
   }
 
-
   Future<Map<String, dynamic>> exportMyData() async {
     if (_session == null) {
       throw StateError('Sign in before exporting data.');
     }
     final response = await _send('POST', '/rest/v1/rpc/export_my_data', null);
-    final json = _decode(response);
-    if (json is! Map<String, dynamic>) {
-      throw const FormatException('Export response must be an object.');
-    }
-    return json;
+    return _decode(response);
   }
 
   Future<void> deleteMyAccount() async {

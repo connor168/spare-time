@@ -1,32 +1,38 @@
 # Focus Flow
 
-Focus Flow is an offline-first Flutter app for daily planning, local reminders,
-GitHub AI project digests, and a personal Markdown knowledge base.
+Focus Flow 是一款面向学生个人使用的 Android-first 时间管理与科技资讯 App。它的目标不是只记录待办事项，而是把课程、作业、考试和个人目标整理成一天中可执行的时间段，提醒用户按计划行动并记录完成情况；同时每天聚合 GitHub、AI、科技与 Linux/开源资讯。
 
-The product plan is in [docs/PROJECT_PLAN.md](docs/PROJECT_PLAN.md).
-The accepted platform decisions are in
-[docs/adr/0001-platform-and-data-architecture.md](docs/adr/0001-platform-and-data-architecture.md),
-and release coverage is tracked in [docs/DEVICE_MATRIX.md](docs/DEVICE_MATRIX.md).
+完整且已确认的第一版需求见 [产品需求文档](docs/PRODUCT_REQUIREMENTS.md)，最新验证记录见 [2026-08-15 项目状态](docs/PROJECT_STATUS_2026-08-15.md)。历史实施计划、架构决策和阶段报告保留在 `docs/` 中作为参考，但若与产品需求文档冲突，以产品需求文档为准。
 
-## Current status
+## 第一版范围
 
-The local mobile MVP contains the responsive Flutter shell, Drift/SQLite task
-and note repositories, local notification scheduling, account-scoped local
-data, and tombstone-aware sync. The project currently passes `flutter analyze`
-and 40 Flutter tests. Verified debug artifacts are available for Android and
-Windows; the Windows debug shell intentionally uses in-memory repositories and
-omits mobile-only native plugins during its build.
+- 平台：先支持 Android，第一阶段仅供项目作者个人使用。
+- 计划方式：既能手动创建时间块，也能根据课程、作业、考试日期和个人目标，用本地规则生成计划草稿。
+- 草稿确认：自动计划必须先允许拖动、修改，确认后才写入正式日程。
+- 未完成任务：只允许在当天剩余空闲时间内重新安排；没有合适空位时标记为“今日未完成”，保留历史，不自动顺延到第二天。
+- 提醒：课程和普通任务默认提前 5 分钟提醒。
+- 资讯：每天 07:00 发送一条“今日资讯已更新”通知，App 内提供约 50 条 GitHub 热门项目、AI、科技和 Linux/开源资讯。
+- 语言：保留来源、发布时间与原文链接，支持英文原文和设备本地中文翻译切换。
+- 账号：需要登录和多设备同步；第一版目标登录方式为微信和 QQ。
 
-The current delivery status and remaining release blockers are tracked in
-[docs/PROJECT_STATUS_2026-08-09.md](docs/PROJECT_STATUS_2026-08-09.md).
+## 当前状态
 
-## Next setup
+仓库中已经存在 Flutter 界面、本地数据、通知、Supabase 同步、GitHub 聚合等基础代码，但当前实现尚未达到第一版完整验收标准。2026-08-15 已恢复 Android 工程健康基线：`flutter analyze` 无问题、51 个 Flutter 测试全部通过，并成功生成当前源码对应的 `build/app/outputs/flutter-apk/app-debug.apk`。
 
-1. Keep `scripts/bootstrap_flutter.py` and `scripts/bootstrap_android_sdk.py` as
-   the reproducible bootstrap path for new machines.
-2. Verify iOS/macOS release paths on the appropriate host if you want those
-   stores covered.
-3. Apply `supabase/migrations/0002_release_hardening.sql`, deploy both Edge
-   Functions, and run the cloud integration matrix.
-4. Complete server-side sync conflict control, push gateway integration,
-   platform credentials, release signing, and real-device QA.
+以上结果证明当前开发版本可以分析、测试和构建，不代表微信/QQ 登录、真实课程表、双设备云同步、每日约 50 条资讯、本地翻译、正式签名或真机发布验收已经完成。部分早期状态文档包含过期的测试数量和平台范围描述，不能作为当前发布证明。
+
+## 外部配置依赖
+
+微信和 QQ 登录不是只写客户端代码即可完成。第一版真实联调前，项目所有者需要分别完成微信开放平台和 QQ 互联的开发者注册/认证、创建移动应用并通过平台审核，然后提供 App ID 等公开配置以及安全存放于服务端的密钥。Android 包名和发布签名证书指纹一旦用于平台申请，应保持稳定。
+
+永久 Android 包名已确认为 `com.focusflow.planner`。微信、QQ、Firebase、发布签名和后续分发配置必须始终使用该包名。发布签名应由项目所有者创建并妥善备份，keystore、密码和平台密钥不得提交到 Git。
+
+课程表也属于外部输入：用户后续提供真实学期课表后，第一版采用一次性解析并导入，不先开发通用截图、Excel、教务系统或日历导入界面。
+
+## 下一步
+
+1. 恢复项目到可分析、可测试、可构建的 Android 基线。
+2. 完成时间轴、计划草稿、拖动修改、当日重排、完成记录和 5 分钟提醒闭环。
+3. 接入用户提供的课程表数据。
+4. 完成约 50 条资讯的聚合、缓存、双语切换和每日单条通知。
+5. 确认永久包名与发布签名，并办理微信开放平台、QQ 互联资质后完成登录和多设备同步联调。

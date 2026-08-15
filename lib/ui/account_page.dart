@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 
 import '../services/auth_controller.dart';
+import '../services/sync_engine.dart';
 
 class AccountPage extends StatefulWidget {
   const AccountPage(
@@ -17,7 +18,7 @@ class AccountPage extends StatefulWidget {
   final AuthController controller;
   final Future<SyncReport> Function()? onSync;
   final Future<void> Function()? onSignOut;
-  final VoidCallback? onImportGuestData;
+  final Future<void> Function()? onImportGuestData;
   final Future<GuestDataCount> Function()? onCountGuestData;
   final Future<ConflictChoice?> Function(String entityType, String title,
       String localSummary, String remoteSummary)? onResolveConflict;
@@ -97,8 +98,7 @@ class _AccountPageState extends State<AccountPage> {
       future: _countGuestData(),
       builder: (context, snapshot) {
         final count = snapshot.data;
-        if (count == null ||
-            (count.taskCount == 0 && count.noteCount == 0)) {
+        if (count == null || (count.taskCount == 0 && count.noteCount == 0)) {
           return const SizedBox.shrink();
         }
         return Padding(
@@ -146,7 +146,7 @@ class _AccountPageState extends State<AccountPage> {
       const SizedBox(height: 8),
       OutlinedButton.icon(
           key: const Key('account-signout-button'),
-          onPressed: widget.onSignOut ?? controller.signOut,
+          onPressed: widget.onSignOut ?? widget.controller.signOut,
           icon: const Icon(Icons.logout),
           label: const Text('Sign out')),
       const SizedBox(height: 16),
@@ -227,7 +227,7 @@ class _AccountPageState extends State<AccountPage> {
   Future<void> _syncWithConflictUI(BuildContext context) async {
     try {
       final report = await widget.onSync?.call();
-      if (report == null || !mounted) return;
+      if (report == null || !context.mounted) return;
       final message = report.conflicts > 0
           ? 'Sync complete: pulled ${report.pulled}, pushed ${report.pushed}, ${report.conflicts} conflict(s). Tap to review.'
           : 'Sync complete: pulled ${report.pulled}, pushed ${report.pushed}.';
@@ -241,10 +241,9 @@ class _AccountPageState extends State<AccountPage> {
             : null,
       ));
     } on Object catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Sync failed: $error')));
-      }
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Sync failed: $error')));
     }
   }
 
@@ -264,8 +263,7 @@ class _AccountPageState extends State<AccountPage> {
             'To resolve, review the items and manually merge changes.'),
         actions: [
           FilledButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Got it')),
+              onPressed: () => Navigator.pop(ctx), child: const Text('Got it')),
         ],
       ),
     );
@@ -274,7 +272,7 @@ class _AccountPageState extends State<AccountPage> {
   Future<void> _exportData(BuildContext context) async {
     try {
       final data = await widget.controller.client.exportMyData();
-      if (!mounted) return;
+      if (!context.mounted) return;
       showDialog(
         context: context,
         builder: (ctx) => AlertDialog(
@@ -285,8 +283,7 @@ class _AccountPageState extends State<AccountPage> {
             child: SingleChildScrollView(
               child: SelectableText(
                 const JsonEncoder.withIndent('  ').convert(data),
-                style:
-                    const TextStyle(fontSize: 12, fontFamily: 'monospace'),
+                style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
               ),
             ),
           ),
@@ -298,7 +295,7 @@ class _AccountPageState extends State<AccountPage> {
         ),
       );
     } on Object catch (error) {
-      if (!mounted) return;
+      if (!context.mounted) return;
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text('Export failed: $error')));
     }
@@ -327,16 +324,15 @@ class _AccountPageState extends State<AccountPage> {
         ],
       ),
     );
-    if (confirmed != true || !mounted) return;
+    if (confirmed != true || !context.mounted) return;
     try {
       await widget.controller.client.deleteMyAccount();
       await widget.controller.signOut();
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('Account deleted.')));
-      }
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Account deleted.')));
     } on Object catch (error) {
-      if (!mounted) return;
+      if (!context.mounted) return;
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text('Deletion failed: $error')));
     }
@@ -361,13 +357,12 @@ class _AccountPageState extends State<AccountPage> {
         ],
       ),
     );
-    if (result != true || !mounted) return;
-    widget.onImportGuestData?.call();
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Guest data imported.')));
-      setState(() {});
-    }
+    if (result != true || !context.mounted) return;
+    await widget.onImportGuestData?.call();
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(const SnackBar(content: Text('Guest data imported.')));
+    setState(() {});
   }
 
   Future<GuestDataCount> _countGuestData() async {
@@ -402,14 +397,6 @@ class GuestDataCount {
   final int noteCount;
 }
 
-class SyncReport {
-  const SyncReport(
-      {required this.pulled, required this.pushed, required this.conflicts});
-  final int pulled;
-  final int pushed;
-  final int conflicts;
-}
-
 class ConflictResolver {
   static Future<ConflictChoice?> show(
     BuildContext context, {
@@ -437,15 +424,15 @@ class ConflictResolver {
                         fontWeight: FontWeight.w600)),
                 const SizedBox(height: 4),
                 Text(localSummary,
-                    style: const TextStyle(
-                        fontSize: 13, color: Colors.black54)),
+                    style:
+                        const TextStyle(fontSize: 13, color: Colors.black54)),
                 const SizedBox(height: 12),
                 const Text('Cloud',
                     style: TextStyle(fontWeight: FontWeight.w600)),
                 const SizedBox(height: 4),
                 Text(remoteSummary,
-                    style: const TextStyle(
-                        fontSize: 13, color: Colors.black54)),
+                    style:
+                        const TextStyle(fontSize: 13, color: Colors.black54)),
               ]),
         ),
         actions: [

@@ -59,7 +59,7 @@ class DeviceTokenRegistrar {
   StreamSubscription<String>? _subscription;
   String? _currentToken;
   Future<void> _refreshQueue = Future<void>.value();
-  final List<String> _pendingRevocations = [];
+  final Map<String, int> _pendingRevocations = {};
   Timer? _retryTimer;
   static const _retryDelay = Duration(minutes: 5);
   static const _maxRetries = 12;
@@ -73,6 +73,8 @@ class DeviceTokenRegistrar {
       _refreshQueue = _refreshQueue
           .then((_) => _replaceToken(token))
           .catchError((Object _) {});
+    });
+  }
 
   void _scheduleRetry() {
     if (_retryTimer?.isActive ?? false) return;
@@ -83,26 +85,21 @@ class DeviceTokenRegistrar {
 
   Future<void> _processRetryQueue() async {
     if (_pendingRevocations.isEmpty || supabase.session == null) return;
-    final batch = List<String>.from(_pendingRevocations);
+    final batch = Map<String, int>.from(_pendingRevocations);
     _pendingRevocations.clear();
-    var remaining = <String>[];
-    for (final token in batch) {
+    for (final entry in batch.entries) {
       try {
-        await supabase.revokeDeviceToken(token);
+        await supabase.revokeDeviceToken(entry.key);
       } on Object {
-        remaining.add(token);
+        final attempts = entry.value + 1;
+        if (attempts < _maxRetries) {
+          _pendingRevocations[entry.key] = attempts;
+        }
       }
     }
-    if (remaining.isNotEmpty) {
-      _pendingRevocations.addAll(remaining);
-      if (_pendingRevocations.length > _maxRetries * batch.length) {
-        _pendingRevocations.clear();
-        return;
-      }
+    if (_pendingRevocations.isNotEmpty) {
       _scheduleRetry();
     }
-  }
-    });
   }
 
   Future<void> dispose() async {
@@ -118,15 +115,9 @@ class DeviceTokenRegistrar {
     try {
       await supabase.revokeDeviceToken(token);
     } on Object {
-      _pendingRevocations.add(token);
+      _pendingRevocations[token] = 1;
       _scheduleRetry();
     }
-  }
-    await dispose();
-    final token = _currentToken;
-    _currentToken = null;
-    if (token == null || token.isEmpty || supabase.session == null) return;
-    await supabase.revokeDeviceToken(token);
   }
 
   Future<void> _register(String? token) async {
@@ -140,7 +131,12 @@ class DeviceTokenRegistrar {
     await _register(token);
     _currentToken = token;
     if (previous != null && previous.isNotEmpty && previous != token) {
-      await supabase.revokeDeviceToken(previous);
+      try {
+        await supabase.revokeDeviceToken(previous);
+      } on Object {
+        _pendingRevocations[previous] = 1;
+        _scheduleRetry();
+      }
     }
   }
 }

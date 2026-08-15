@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=1600, initial-scale=1">
+  <title>Focus Flow APP 核心运行流程</title>
+  <link rel="stylesheet" href="review-flow.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <img src="../../branding/focus-flow-wechat-108.png" alt="Focus Flow 图标">
+      <div>
+        <h1>Focus Flow · APP 核心运行流程</h1>
+        <div class="subtitle">学生时间管理、任务提醒与科技资讯聚合</div>
+      </div>
+    </div>
+    <div class="badge">Android 个人测试版</div>
+  </header>
+
+  <main>
+    <section class="flow">
+      <article class="stage">
+        <div class="number">1</div>
+        <h2>建立今日计划</h2>
+        <p>从课程、作业、考试与个人目标中整理任务；也可手动新建时间段。</p>
+        <span class="tag">课程 + 任务</span>
+      </article>
+      <article class="stage">
+        <div class="number">2</div>
+        <h2>生成计划草稿</h2>
+        <p>根据当天已有安排寻找空闲时间，先形成草稿，由用户调整时长和顺序。</p>
+        <span class="tag">确认后生效</span>
+      </article>
+      <article class="stage">
+        <div class="number">3</div>
+        <h2>按时间执行</h2>
+        <p>任务开始前默认 5 分钟提醒；时间线展示当前时段应该完成的内容。</p>
+        <span class="tag">本地通知</span>
+      </article>
+      <article class="stage">
+        <div class="number">4</div>
+        <h2>记录完成结果</h2>
+        <p>已完成即勾选；未完成任务只在当天尝试重排，否则保留为“今日未完成”。</p>
+        <span class="tag">保留历史</span>
+      </article>
+    </section>
+
+    <section class="lower">
+      <article class="panel">
+        <h3><span class="dot"></span>科技资讯流程</h3>
+        <ul>
+          <li>每日 <strong>07:00</strong> 更新 GitHub 热门、AI、科技与 Linux 资讯</li>
+          <li>手机仅收到一条“今日资讯已更新”通知</li>
+          <li>进入列表后阅读约 50 条内容，并可在英文原文与本地中文翻译间切换</li>
+        </ul>
+      </article>
+      <article class="panel">
+        <h3><span class="dot"></span>账号与数据流程</h3>
+        <ul>
+          <li>游客可先在本机使用课程、任务和笔记功能</li>
+          <li>登录后将计划数据同步到个人账号，供多设备继续使用</li>
+          <li>微信登录在开放平台审核通过后接入，密钥仅保存在服务端</li>
+        </ul>
+      </article>
+    </section>
+
+    <footer class="note">
+      <span><strong>隐私原则：</strong>仅在功能需要时申请通知、文件导入等权限；账号数据支持导出与删除。</span>
+      <span>Focus Flow / com.focusflow.planner</span>
+    </footer>
+  </main>
+</body>
+</html>

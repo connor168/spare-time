@@ -15,6 +15,39 @@ mobile-app registration. Confirm the live values one final time before review.
 | 28 px icon | `assets/branding/focus-flow-wechat-28.png` |
 | 108 px icon | `assets/branding/focus-flow-wechat-108.png` |
 
+## Remaining application-form fields
+
+| Field | Recommended value |
+| --- | --- |
+| High-definition application image | `assets/branding/focus-flow-wechat-108.png` |
+| App-market status | `未上架任何应用市场` |
+| Application category | Prefer `工具 → 效率` |
+| Application operation flow | Upload both PNG files under `assets/wechat-review/` |
+| Application/change explanation | `Focus Flow 是面向学生的 Android 时间管理与科技资讯应用，现申请创建移动应用并接入微信登录。当前为个人测试版，暂未上架应用市场；官网、隐私政策和测试 APK 已公开。审核通过后，微信登录将用于账号关联和多设备同步。` |
+
+The category list can vary by verified-account type and is only authoritative in
+the signed-in Open Platform console. If `工具 → 效率` is unavailable, prefer
+`工具 → 日历`, then `工具 → 备忘录` or `工具 → 办公`. Do not choose online
+education: Focus Flow manages study time but does not deliver teaching content.
+Do not use news as the primary category because news aggregation is a supporting
+feature and may trigger unrelated qualification requirements.
+
+The explanation above is below the 200-character form limit. Because this is a
+public personal preview and no review-only login is required to open the core
+local features, do not place a password in the form. If the reviewer later asks
+for an account, create a dedicated non-personal test account and add only that
+account's credentials.
+
+### Review image upload order
+
+1. Upload `assets/branding/focus-flow-wechat-108.png` for the required 108 x 108
+   high-definition application image.
+2. Upload `assets/wechat-review/focus-flow-app-operation-flow.png` as the first
+   operation-flow image.
+3. Upload `assets/wechat-review/focus-flow-wechat-login-flow.png` as the second
+   image. It is explicitly labelled as an integration that will be enabled after
+   approval.
+
 Do not submit the website field until the public URL opens successfully without
 a login wall. Replace the generic developer label and GitHub Issues contact if
 the platform requires the verified developer's legal name and a direct email.

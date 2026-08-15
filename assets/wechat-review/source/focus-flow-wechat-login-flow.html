@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=1600, initial-scale=1">
+  <title>Focus Flow 微信登录接入流程</title>
+  <link rel="stylesheet" href="review-flow.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <img src="../../branding/focus-flow-wechat-108.png" alt="Focus Flow 图标">
+      <div>
+        <h1>Focus Flow · 微信登录接入流程</h1>
+        <div class="subtitle">授权、账号关联与多设备同步的安全边界</div>
+      </div>
+    </div>
+    <div class="badge planned">审核通过后启用</div>
+  </header>
+
+  <main>
+    <ol class="steps-vertical">
+      <li class="vstep">
+        <div class="vnum">1</div>
+        <div>
+          <h2>用户主动点击“微信登录”</h2>
+          <p>Focus Flow 仅在用户明确选择后拉起微信客户端，不在应用启动时自动授权。</p>
+        </div>
+        <div class="owner">Focus Flow 客户端</div>
+      </li>
+      <li class="vstep">
+        <div class="vnum">2</div>
+        <div>
+          <h2>微信展示授权确认页</h2>
+          <p>用户在微信客户端确认授权；取消时直接返回 Focus Flow，不创建或关联账号。</p>
+        </div>
+        <div class="owner wechat">微信 OpenSDK</div>
+      </li>
+      <li class="vstep">
+        <div class="vnum">3</div>
+        <div>
+          <h2>授权结果返回应用</h2>
+          <p>微信通过 Android 回调返回一次性授权码，客户端把授权码发送至 Focus Flow 服务端。</p>
+        </div>
+        <div class="owner">Android 回调</div>
+      </li>
+      <li class="vstep">
+        <div class="vnum">4</div>
+        <div>
+          <h2>服务端完成安全交换</h2>
+          <p>服务端使用 AppSecret 换取微信身份，创建或关联 Focus Flow 账号；AppSecret 不进入 APK。</p>
+        </div>
+        <div class="owner server">Focus Flow 服务端</div>
+      </li>
+      <li class="vstep">
+        <div class="vnum">5</div>
+        <div>
+          <h2>签发会话并同步个人数据</h2>
+          <p>登录成功后返回应用，用户可同步课程、任务、完成记录与偏好设置；支持退出和账号删除。</p>
+        </div>
+        <div class="owner server">账号与同步服务</div>
+      </li>
+    </ol>
+
+    <section class="security">
+      <div><strong>最小授权</strong>只获取登录所需的基础身份信息。</div>
+      <div><strong>密钥隔离</strong>AppSecret 与令牌交换只发生在服务端。</div>
+      <div><strong>用户可控</strong>可取消授权、退出登录并申请删除账号数据。</div>
+    </section>
+  </main>
+</body>
+</html>

@@ -17,6 +17,7 @@ $env:GRADLE_USER_HOME = Join-Path $root '.tools\gradle'
 $flutter = Join-Path $root '.tools\flutter\bin\flutter.bat'
 if (-not (Test-Path $flutter)) { throw 'Local Flutter SDK not found. Run scripts/bootstrap_flutter.py first.' }
 
-& $flutter pub get --offline
+& $flutter pub get
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 if ($Format -eq 'apk') { & $flutter build apk --release } else { & $flutter build appbundle --release }
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

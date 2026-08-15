@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Focus Flow 隐私政策">
+  <link rel="icon" href="assets/app-icon.png">
+  <link rel="stylesheet" href="styles.css">
+  <title>隐私政策 — Focus Flow</title>
+</head>
+<body>
+  <header><nav class="shell"><a class="brand" href="./"><img src="assets/app-icon.png" alt="Focus Flow 图标">Focus Flow</a><div class="links"><a href="./">返回官网</a><a href="terms.html">用户协议</a></div></nav></header>
+  <main class="shell document">
+    <span class="eyebrow">公开版本 · 2026-08-15</span>
+    <h1>Focus Flow 隐私政策</h1>
+    <p class="meta">生效日期：2026 年 8 月 15 日　·　适用版本：Android 个人测试版</p>
+    <p>Focus Flow（以下简称“本应用”）是一款由独立开发者维护的学生时间管理与科技资讯应用。本政策说明本应用在你使用计划、提醒、资讯、账号与同步功能时如何处理信息。未在本政策中说明的目的，不会擅自收集或使用你的信息。</p>
+
+    <h2>1. 我们处理的信息</h2>
+    <h3>1.1 本地计划数据</h3>
+    <p>你创建的课程、任务、开始与结束时间、完成状态、提醒设置、笔记和标签会保存在设备本地，用于展示时间线、安排提醒和保留历史记录。这些内容由你主动填写。</p>
+    <h3>1.2 账号与同步数据</h3>
+    <p>当你主动注册或登录时，本应用会处理邮箱地址、账号标识和登录会话。开启同步后，课程、任务、笔记及其修改时间会传输至配置的 Supabase 服务，用于在你的设备之间同步。密码由认证服务处理，本应用不保存明文密码。</p>
+    <h3>1.3 社交登录信息</h3>
+    <p>微信或 QQ 登录能力通过平台审核并在应用中正式启用后，只有在你主动选择相应登录方式时，本应用才会请求平台提供的授权标识和你同意提供的基础账号资料，用于创建或关联 Focus Flow 账号。授权密钥不会写入客户端。本测试版未启用时，不会采集这些信息。</p>
+    <h3>1.4 资讯访问数据</h3>
+    <p>当你刷新 GitHub、AI、科技或 Linux 资讯时，应用会向资讯聚合服务发起网络请求。服务提供方可能按其规则记录 IP 地址、请求时间和基础网络日志。应用不会将你的课程或任务内容发送给新闻网站。</p>
+    <h3>1.5 通知信息</h3>
+    <p>在你同意通知权限后，本应用会在设备上创建任务提醒和“今日资讯已更新”通知。任务名称和提醒时间可能出现在系统通知中。你可以在系统设置中关闭通知。</p>
+
+    <h2>2. 设备权限</h2>
+    <table>
+      <thead><tr><th>权限或能力</th><th>用途</th><th>触发方式</th></tr></thead>
+      <tbody>
+        <tr><td>网络访问</td><td>账号登录、数据同步、获取科技资讯</td><td>使用相关联网功能时</td></tr>
+        <tr><td>通知</td><td>任务提前五分钟提醒、每日资讯更新提示</td><td>首次使用提醒功能时由系统询问</td></tr>
+        <tr><td>精确闹钟</td><td>在用户设定时间附近发送本地提醒</td><td>启用精确提醒时</td></tr>
+        <tr><td>文件或图片选择</td><td>后续版本中由你主动选择课程表、Excel 或日历文件进行导入</td><td>仅点击导入后；功能未启用时不访问</td></tr>
+      </tbody>
+    </table>
+
+    <h2>3. 本地翻译</h2>
+    <p>中英文切换能力计划优先调用 Android 设备上的本地翻译模型。若当前设备不支持，本应用不会未经说明把全文发送到第三方翻译服务。具体可用性以应用内功能提示为准。</p>
+
+    <h2>4. 第三方服务</h2>
+    <p>仅在对应功能已配置和启用时，本应用可能使用以下服务：</p>
+    <ul>
+      <li>Supabase：账号认证与多设备数据同步。</li>
+      <li>GitHub API、RSS 来源及相关资讯网站：提供公开科技资讯。</li>
+      <li>Firebase Cloud Messaging 或华为 Push Kit：远程通知送达。</li>
+      <li>微信 OpenSDK、QQ 互联 SDK：在你主动授权时完成第三方登录。</li>
+    </ul>
+    <p>第三方会依据其各自隐私政策处理必要信息。本应用不会把你的 AppSecret、密码或课程任务正文提供给社交登录平台。</p>
+
+    <h2>5. 保存、保护与删除</h2>
+    <p>本地数据保存到你删除记录、清除应用数据或卸载应用为止。云端同步数据保存到你删除账号或提出删除请求为止。登录令牌使用系统安全存储保存；传输使用 HTTPS。测试软件无法承诺绝对安全，请勿在笔记中存放密码、证件号码等高度敏感信息。</p>
+    <p>你可以在应用账号页面导出数据、退出登录或申请删除账号；也可以通过项目反馈渠道提出访问、更正或删除请求。账号删除会在合理期限内清除可识别的云端业务数据，法律要求保留的安全日志除外。</p>
+
+    <h2>6. 未成年人</h2>
+    <p>本应用面向学生，但不主动要求填写年龄。未满十四周岁的用户应在监护人同意和指导下使用账号与同步功能，并避免录入不必要的个人信息。</p>
+
+    <h2>7. 政策更新</h2>
+    <p>如果数据类型、第三方 SDK 或使用目的发生重要变化，我们会更新本页面，并在适当情况下于应用内再次征求同意。更新日期会显示在页面顶部。</p>
+
+    <h2>8. 联系我们</h2>
+    <p>开发者：Focus Flow 独立开发者<br>联系与隐私请求：<a href="https://github.com/connor168/spare-time/issues">GitHub Issues</a><br>项目地址：<a href="https://github.com/connor168/spare-time">github.com/connor168/spare-time</a></p>
+  </main>
+  <footer><div class="shell footer-row"><p>© 2026 Focus Flow 独立开发者</p><div class="footer-links"><a href="./">官网</a><a href="terms.html">用户协议</a></div></div></footer>
+</body>
+</html>

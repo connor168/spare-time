@@ -13,6 +13,9 @@
 - 恢复游客数据计数与导入入口，并在同步后刷新本地界面。
 - 将默认任务提醒改为提前 5 分钟，将个人版默认时区改为 `Asia/Shanghai`。
 - 新增微信/QQ 开放平台与 Android 发布签名操作清单。
+- 固定生产签名证书并校验 APK 包名、证书 MD5 与 v2 签名。
+- 生成正式应用图标及微信开放平台 28/108 像素审核资源。
+- 新增可部署的官网、隐私政策、用户协议和 GitHub Pages 工作流。
 
 ## 验证结果
 
@@ -21,7 +24,12 @@
 | `flutter analyze --no-pub` | 通过，`No issues found` |
 | `flutter test --no-pub` | 通过，51/51 |
 | `flutter build apk --debug --no-pub` | 通过 |
+| `assembleRelease` | 通过，生产签名 APK 已生成 |
+| APK 包名 | `com.focusflow.planner` |
+| APK 证书 MD5 | `8d79f05abd5d17e83b2a903aa4292e3b` |
+| APK 签名验证 | v2 通过，单一签名者 |
 | 当前 debug APK | `build/app/outputs/flutter-apk/app-debug.apk` |
+| 当前 release APK | `build/app/outputs/flutter-apk/app-release.apk` |
 
 ## 尚未完成
 
@@ -32,6 +40,6 @@
 - Android 设备本地翻译、中英文切换和翻译缓存。
 - 微信和 QQ 登录 SDK、服务端账号交换及真实平台凭据联调。
 - 真实 Supabase 双设备同步、冲突操作流程和离线恢复验收。
-- Android 发布签名、release AAB、隐私合规和真机矩阵。
+- Release AAB、应用内首次隐私同意流程和 Android 真机矩阵。
 
 第一版完成标准以 `docs/PRODUCT_REQUIREMENTS.md` 为准。

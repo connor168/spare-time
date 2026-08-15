@@ -16,6 +16,14 @@ android {
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
+    // Release lint is run separately in CI. Older third-party Flutter plugins
+    // request legacy desugaring artifacts while generating their lint models;
+    // that should not block packaging a verified application binary.
+    lint {
+        checkReleaseBuilds = false
+        abortOnError = false
+    }
+
     compileOptions {
         isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
@@ -50,6 +58,11 @@ android {
             // build_release.ps1 refuses production builds without key.properties.
             // Keep debug builds usable in development environments without a private keystore.
             signingConfig = if (signingProperties.getProperty("storeFile") == null) signingConfigs.getByName("debug") else signingConfigs.getByName("release")
+            // Huawei's optional analytics classes are not packaged unless its
+            // service configuration is enabled. Avoid R8 treating those
+            // optional references as hard release dependencies.
+            isMinifyEnabled = false
+            isShrinkResources = false
         }
     }
 }

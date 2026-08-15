@@ -1,4 +1,4 @@
-storeFile=focus-flow-release.jks
+storeFile=../focus-flow-upload.jks
 storePassword=replace-with-keystore-password
-keyAlias=focus-flow
+keyAlias=focus-flow-upload
 keyPassword=replace-with-key-password

@@ -6,6 +6,7 @@
     "dev": "tsx watch src/server.ts",
     "start": "tsx src/server.ts",
     "test": "vitest run",
+    "test:integration": "tsx tooling/verify-test-database.ts && vitest run test/integration.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "engines": {

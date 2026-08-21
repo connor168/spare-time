@@ -27,3 +27,16 @@ database.
 For a local PostgreSQL instance, `docker compose up -d postgres` is sufficient;
 apply migrations in order before starting the API. The `docker-compose.yml`
 service is a development scaffold, not a production secret-management setup.
+
+## PostgreSQL integration test
+
+The integration suite only runs when a dedicated PostgreSQL database is supplied.
+It applies the migrations and exercises email authentication, refresh-token
+rotation, sync CAS conflicts, device tokens, export, and account deletion.
+
+```text
+FOCUS_FLOW_TEST_DATABASE_URL=postgres://focusflow:change-me@localhost:5432/focusflow_test npm run test:integration
+```
+
+Use an isolated test database. Do not point this variable at production: the
+suite creates test data and deletes the test account after each run.

@@ -11,9 +11,9 @@
 `FocusFlowApiClient`。阿里云认证端点已定义并有客户端单元测试；同步端点仍需
 服务端实现后再启用。Supabase 代码目前仅作为迁移适配器保留。
 
-当前已新增 `backend/` Node.js + TypeScript 服务骨架，包含认证路由、JWT、
-Refresh Token、微信服务端换码逻辑、PostgreSQL 初始迁移和 Docker 开发配置。
-后端依赖尚未安装，API 尚未部署到阿里云。
+当前已新增 `backend/` Node.js + TypeScript 服务，包含认证路由、JWT、
+Refresh Token、微信服务端换码逻辑、PostgreSQL 迁移和 Docker 开发配置。
+依赖、类型检查、单元测试和本地 PostgreSQL 集成测试已经验证；API 尚未部署到阿里云。
 
 当前工作区正在开发“课程、今日计划、历史记录和提醒开关”这一核心模块，但**这批改动尚未提交，且尚未通过完整验证**。因此，不能把当前工作区当作可发布版本。
 
@@ -29,14 +29,16 @@ Refresh Token、微信服务端换码逻辑、PostgreSQL 初始迁移和 Docker 
 
 ## 两个必须区分的版本
 
-### 已提交且已验证的基线
+### 已提交且已验证的当前版本
 
-- Git 提交：`9a48f92`（`master`）
-- 最近一次已验证记录：2026-08-15
+- Git 提交：`086bdfb`（`master`，已推送至 `origin/master`）
+- 最近一次已验证记录：2026-08-21
 - 已验证结果：
-  - `flutter analyze --no-pub`：通过
-  - `flutter test --no-pub`：51/51 通过
-  - Debug APK、生产签名 Release APK：已构建
+  - `flutter analyze --no-pub`：通过，`No issues found!`
+  - `flutter test --no-pub`：74/74 通过
+  - 后端 `npm run typecheck`：通过
+  - 后端单元测试：2/2 通过；PostgreSQL 集成测试：1/1 通过
+  - Debug APK：已构建
   - Android 包名：`com.focusflow.planner`
   - 生产证书 MD5：`8d79f05abd5d17e83b2a903aa4292e3b`
 - 已公开资源：
@@ -46,9 +48,9 @@ Refresh Token、微信服务端换码逻辑、PostgreSQL 初始迁移和 Docker 
 
 这证明工程在 2026-08-15 可以构建和安装，**不代表第一版功能已经完成**。
 
-### 当前正在开发的工作区
+### 当前提交包含的产品能力
 
-当前有 21 个未提交文件改动，目标是补齐“今日计划与课程提醒”基础闭环：
+本次已提交“今日计划与课程提醒”基础闭环：
 
 - 新增三种安排类型：学习任务、课程、时间段。
 - 新增三种状态：计划中、已完成、今日未完成。
@@ -59,23 +61,19 @@ Refresh Token、微信服务端换码逻辑、PostgreSQL 初始迁移和 Docker 
 - 增加课程提醒总开关：关闭时取消课程提醒，重新开启时重新调度。
 - 通知文案计划显示“课程名称 + 时间 + 地点”，并采用高优先级通知渠道。
 
-这些内容现在只能标记为 **开发中**，原因见“当前验证结果”。
+这些内容已通过静态分析、Flutter 全量测试和 Debug APK 构建；仍缺少 Android
+真机通知验证和真实后端联调。
 
 ## 当前验证结果
 
 | 检查 | 结果 | 结论 |
 | --- | --- | --- |
-| `flutter analyze --no-pub` | 1 条 info，`lib/main.dart:711` 缺少花括号 | 需要修复后才算通过。 |
-| `flutter test --no-pub` | 58 通过，11 失败 | 当前工作区不能通过全量测试。 |
-| 当前开发中版本的 APK 构建 | 未执行 | 不能声称当前代码可构建发布。 |
+| `flutter analyze --no-pub` | `No issues found!` | 通过。 |
+| `flutter test --no-pub` | 74 通过，0 失败 | 通过。 |
+| 当前版本的 Debug APK 构建 | 通过 | 产物位于 `build/app/outputs/flutter-apk/app-debug.apk`。 |
+| 后端 TypeScript 与单元测试 | 通过 | `npm run typecheck` 和 2 个单元测试通过。 |
+| 后端 PostgreSQL 集成测试 | 1/1 通过 | 使用隔离的本机 `focusflow_test` 容器，已验证迁移、认证、刷新 Token、同步冲突、设备 Token、导出与删号。 |
 | Android 真机课程提醒 | 未执行 | 锁屏、状态栏、权限、重启恢复仍未验收。 |
-
-本轮测试失败的主要原因：
-
-1. 今日页新增了 `Asia/Shanghai` 日期过滤，但 Widget 测试直接创建 APP 时没有初始化时区数据，导致多个界面测试失败。
-2. 新增安排对话框的一个测试没有先滚动到提醒下拉框，属于测试可见区域问题；需要修正测试并再次确认真实界面行为。
-
-这两个问题是当前开发阶段发现的缺陷，尚未修复或提交。
 
 ## 功能完成度
 
@@ -89,7 +87,7 @@ Refresh Token、微信服务端换码逻辑、PostgreSQL 初始迁移和 Docker 
 - Android 包名、生产签名、正式 APK、隐私政策、用户协议、GitHub Pages 官网。
 - 微信开放平台移动应用已创建并处于审核流程；审核资料已准备。
 
-### 正在开发，尚未验收
+### 已实现，尚待真机或服务端验收
 
 - 课程、学习任务、时间段的数据模型。
 - 课程地点、课程提醒总开关、单项提醒关闭。
@@ -118,12 +116,12 @@ Refresh Token、微信服务端换码逻辑、PostgreSQL 初始迁移和 Docker 
 
 ## 下一步开发顺序
 
-1. 修复当前开发中版本的时区初始化、对话框测试和静态检查问题，恢复全量测试通过。
-2. 在 Android 真机验证课程提醒：通知权限、提前 5 分钟、锁屏/状态栏显示、关闭/重新开启、重启后恢复。
-3. 提交并推送“课程/今日/历史/提醒”基础闭环。
-4. 实现计划草稿、手动调整、确认生效与仅当天重排。
-5. 实现每日约 50 条资讯、07:00 单条通知和中英文切换。
-6. 等微信审核通过后接入微信登录；QQ 登录与真实双设备同步随后联调。
+1. 为 CI 保留并定期运行隔离的 PostgreSQL 集成测试。
+2. 部署阿里云 PostgreSQL、Node.js 服务和 HTTPS 域名；运行迁移并检查 `/health`。
+3. 使用 `FOCUS_FLOW_API_URL` 切换 Flutter 到自有 API，完成邮件登录、Token 刷新与双设备同步联调。
+4. 在 Android 真机验证课程提醒：通知权限、提前 5 分钟、锁屏/状态栏显示、关闭/重新开启、重启恢复。
+5. 等微信审核通过后，配置服务器端 AppSecret 并完成微信真机登录。
+6. 实现计划草稿、仅当天重排、资讯聚合与双语缓存，再进行 Release AAB 验收。
 
 ## 使用建议
 

@@ -1,0 +1,29 @@
+services:
+  api:
+    build: .
+    image: focus-flow-api:latest
+    env_file: .env
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - ./secrets/rds-ca.pem:/run/secrets/rds-ca.pem:ro
+
+  caddy:
+    image: caddy:2.8-alpine
+    depends_on:
+      - api
+    environment:
+      API_DOMAIN: ${API_DOMAIN}
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:

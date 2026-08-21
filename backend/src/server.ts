@@ -261,7 +261,7 @@ declare module 'fastify' {
 
 if (process.env.NODE_ENV !== 'test') {
   const config = loadConfig();
-  const pool = createPool(config.databaseUrl);
+  const pool = createPool(config);
   const app = buildApp(config, pool);
   app.listen({ port: config.port, host: '0.0.0.0' }).catch((error) => {
     app.log.error(error);

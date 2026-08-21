@@ -7,6 +7,7 @@ const config: Config = {
   nodeEnv: 'test',
   port: 0,
   databaseUrl: 'postgres://unused',
+  databaseSslCaFile: null,
   jwtSecret: new TextEncoder().encode('a'.repeat(32)),
   jwtIssuer: 'focus-flow-test',
   accessTokenTtlSeconds: 900,

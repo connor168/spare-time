@@ -19,9 +19,10 @@ suite('Focus Flow API PostgreSQL integration', () => {
 
   beforeAll(async () => {
     if (!databaseUrl) throw new Error('FOCUS_FLOW_TEST_DATABASE_URL is required');
-    pool = createPool(databaseUrl);
+    const config = testConfig(databaseUrl);
+    pool = createPool(config);
     await applyMigrations(pool);
-    app = buildApp(testConfig(databaseUrl), pool);
+    app = buildApp(config, pool);
   });
 
   afterAll(async () => {
@@ -163,6 +164,7 @@ function testConfig(databaseUrl: string): Config {
     nodeEnv: 'test',
     port: 0,
     databaseUrl,
+    databaseSslCaFile: null,
     jwtSecret: new TextEncoder().encode('a'.repeat(32)),
     jwtIssuer: 'focus-flow-integration-test',
     accessTokenTtlSeconds: 900,

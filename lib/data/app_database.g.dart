@@ -35,6 +35,21 @@ class $TaskRowsTable extends TaskRows with TableInfo<$TaskRowsTable, TaskRow> {
       type: DriftSqlType.string,
       requiredDuringInsert: false,
       defaultValue: const Constant(''));
+  static const VerificationMeta _kindMeta = const VerificationMeta('kind');
+  @override
+  late final GeneratedColumn<String> kind = GeneratedColumn<String>(
+      'kind', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant('task'));
+  static const VerificationMeta _locationMeta =
+      const VerificationMeta('location');
+  @override
+  late final GeneratedColumn<String> location = GeneratedColumn<String>(
+      'location', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(''));
   static const VerificationMeta _startAtMeta =
       const VerificationMeta('startAt');
   @override
@@ -67,7 +82,17 @@ class $TaskRowsTable extends TaskRows with TableInfo<$TaskRowsTable, TaskRow> {
       'reminder_minutes', aliasedName, false,
       type: DriftSqlType.int,
       requiredDuringInsert: false,
-      defaultValue: const Constant(0));
+      defaultValue: const Constant(5));
+  static const VerificationMeta _reminderEnabledMeta =
+      const VerificationMeta('reminderEnabled');
+  @override
+  late final GeneratedColumn<bool> reminderEnabled = GeneratedColumn<bool>(
+      'reminder_enabled', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("reminder_enabled" IN (0, 1))'),
+      defaultValue: const Constant(true));
   static const VerificationMeta _statusMeta = const VerificationMeta('status');
   @override
   late final GeneratedColumn<String> status = GeneratedColumn<String>(
@@ -115,11 +140,14 @@ class $TaskRowsTable extends TaskRows with TableInfo<$TaskRowsTable, TaskRow> {
         ownerUserId,
         title,
         description,
+        kind,
+        location,
         startAt,
         endAt,
         timezoneId,
         repeatRuleJson,
         reminderMinutes,
+        reminderEnabled,
         status,
         priority,
         version,
@@ -160,6 +188,14 @@ class $TaskRowsTable extends TaskRows with TableInfo<$TaskRowsTable, TaskRow> {
           description.isAcceptableOrUnknown(
               data['description']!, _descriptionMeta));
     }
+    if (data.containsKey('kind')) {
+      context.handle(
+          _kindMeta, kind.isAcceptableOrUnknown(data['kind']!, _kindMeta));
+    }
+    if (data.containsKey('location')) {
+      context.handle(_locationMeta,
+          location.isAcceptableOrUnknown(data['location']!, _locationMeta));
+    }
     if (data.containsKey('start_at')) {
       context.handle(_startAtMeta,
           startAt.isAcceptableOrUnknown(data['start_at']!, _startAtMeta));
@@ -191,6 +227,12 @@ class $TaskRowsTable extends TaskRows with TableInfo<$TaskRowsTable, TaskRow> {
           _reminderMinutesMeta,
           reminderMinutes.isAcceptableOrUnknown(
               data['reminder_minutes']!, _reminderMinutesMeta));
+    }
+    if (data.containsKey('reminder_enabled')) {
+      context.handle(
+          _reminderEnabledMeta,
+          reminderEnabled.isAcceptableOrUnknown(
+              data['reminder_enabled']!, _reminderEnabledMeta));
     }
     if (data.containsKey('status')) {
       context.handle(_statusMeta,
@@ -237,6 +279,10 @@ class $TaskRowsTable extends TaskRows with TableInfo<$TaskRowsTable, TaskRow> {
           .read(DriftSqlType.string, data['${effectivePrefix}title'])!,
       description: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}description'])!,
+      kind: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}kind'])!,
+      location: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}location'])!,
       startAt: attachedDatabase.typeMapping
           .read(DriftSqlType.dateTime, data['${effectivePrefix}start_at'])!,
       endAt: attachedDatabase.typeMapping
@@ -247,6 +293,8 @@ class $TaskRowsTable extends TaskRows with TableInfo<$TaskRowsTable, TaskRow> {
           DriftSqlType.string, data['${effectivePrefix}repeat_rule_json'])!,
       reminderMinutes: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}reminder_minutes'])!,
+      reminderEnabled: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}reminder_enabled'])!,
       status: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}status'])!,
       priority: attachedDatabase.typeMapping
@@ -273,11 +321,14 @@ class TaskRow extends DataClass implements Insertable<TaskRow> {
   final String? ownerUserId;
   final String title;
   final String description;
+  final String kind;
+  final String location;
   final DateTime startAt;
   final DateTime endAt;
   final String timezoneId;
   final String repeatRuleJson;
   final int reminderMinutes;
+  final bool reminderEnabled;
   final String status;
   final int priority;
   final int version;
@@ -289,11 +340,14 @@ class TaskRow extends DataClass implements Insertable<TaskRow> {
       this.ownerUserId,
       required this.title,
       required this.description,
+      required this.kind,
+      required this.location,
       required this.startAt,
       required this.endAt,
       required this.timezoneId,
       required this.repeatRuleJson,
       required this.reminderMinutes,
+      required this.reminderEnabled,
       required this.status,
       required this.priority,
       required this.version,
@@ -309,11 +363,14 @@ class TaskRow extends DataClass implements Insertable<TaskRow> {
     }
     map['title'] = Variable<String>(title);
     map['description'] = Variable<String>(description);
+    map['kind'] = Variable<String>(kind);
+    map['location'] = Variable<String>(location);
     map['start_at'] = Variable<DateTime>(startAt);
     map['end_at'] = Variable<DateTime>(endAt);
     map['timezone_id'] = Variable<String>(timezoneId);
     map['repeat_rule_json'] = Variable<String>(repeatRuleJson);
     map['reminder_minutes'] = Variable<int>(reminderMinutes);
+    map['reminder_enabled'] = Variable<bool>(reminderEnabled);
     map['status'] = Variable<String>(status);
     map['priority'] = Variable<int>(priority);
     map['version'] = Variable<int>(version);
@@ -333,11 +390,14 @@ class TaskRow extends DataClass implements Insertable<TaskRow> {
           : Value(ownerUserId),
       title: Value(title),
       description: Value(description),
+      kind: Value(kind),
+      location: Value(location),
       startAt: Value(startAt),
       endAt: Value(endAt),
       timezoneId: Value(timezoneId),
       repeatRuleJson: Value(repeatRuleJson),
       reminderMinutes: Value(reminderMinutes),
+      reminderEnabled: Value(reminderEnabled),
       status: Value(status),
       priority: Value(priority),
       version: Value(version),
@@ -357,11 +417,14 @@ class TaskRow extends DataClass implements Insertable<TaskRow> {
       ownerUserId: serializer.fromJson<String?>(json['ownerUserId']),
       title: serializer.fromJson<String>(json['title']),
       description: serializer.fromJson<String>(json['description']),
+      kind: serializer.fromJson<String>(json['kind']),
+      location: serializer.fromJson<String>(json['location']),
       startAt: serializer.fromJson<DateTime>(json['startAt']),
       endAt: serializer.fromJson<DateTime>(json['endAt']),
       timezoneId: serializer.fromJson<String>(json['timezoneId']),
       repeatRuleJson: serializer.fromJson<String>(json['repeatRuleJson']),
       reminderMinutes: serializer.fromJson<int>(json['reminderMinutes']),
+      reminderEnabled: serializer.fromJson<bool>(json['reminderEnabled']),
       status: serializer.fromJson<String>(json['status']),
       priority: serializer.fromJson<int>(json['priority']),
       version: serializer.fromJson<int>(json['version']),
@@ -378,11 +441,14 @@ class TaskRow extends DataClass implements Insertable<TaskRow> {
       'ownerUserId': serializer.toJson<String?>(ownerUserId),
       'title': serializer.toJson<String>(title),
       'description': serializer.toJson<String>(description),
+      'kind': serializer.toJson<String>(kind),
+      'location': serializer.toJson<String>(location),
       'startAt': serializer.toJson<DateTime>(startAt),
       'endAt': serializer.toJson<DateTime>(endAt),
       'timezoneId': serializer.toJson<String>(timezoneId),
       'repeatRuleJson': serializer.toJson<String>(repeatRuleJson),
       'reminderMinutes': serializer.toJson<int>(reminderMinutes),
+      'reminderEnabled': serializer.toJson<bool>(reminderEnabled),
       'status': serializer.toJson<String>(status),
       'priority': serializer.toJson<int>(priority),
       'version': serializer.toJson<int>(version),
@@ -397,11 +463,14 @@ class TaskRow extends DataClass implements Insertable<TaskRow> {
           Value<String?> ownerUserId = const Value.absent(),
           String? title,
           String? description,
+          String? kind,
+          String? location,
           DateTime? startAt,
           DateTime? endAt,
           String? timezoneId,
           String? repeatRuleJson,
           int? reminderMinutes,
+          bool? reminderEnabled,
           String? status,
           int? priority,
           int? version,
@@ -413,11 +482,14 @@ class TaskRow extends DataClass implements Insertable<TaskRow> {
         ownerUserId: ownerUserId.present ? ownerUserId.value : this.ownerUserId,
         title: title ?? this.title,
         description: description ?? this.description,
+        kind: kind ?? this.kind,
+        location: location ?? this.location,
         startAt: startAt ?? this.startAt,
         endAt: endAt ?? this.endAt,
         timezoneId: timezoneId ?? this.timezoneId,
         repeatRuleJson: repeatRuleJson ?? this.repeatRuleJson,
         reminderMinutes: reminderMinutes ?? this.reminderMinutes,
+        reminderEnabled: reminderEnabled ?? this.reminderEnabled,
         status: status ?? this.status,
         priority: priority ?? this.priority,
         version: version ?? this.version,
@@ -433,6 +505,8 @@ class TaskRow extends DataClass implements Insertable<TaskRow> {
       title: data.title.present ? data.title.value : this.title,
       description:
           data.description.present ? data.description.value : this.description,
+      kind: data.kind.present ? data.kind.value : this.kind,
+      location: data.location.present ? data.location.value : this.location,
       startAt: data.startAt.present ? data.startAt.value : this.startAt,
       endAt: data.endAt.present ? data.endAt.value : this.endAt,
       timezoneId:
@@ -443,6 +517,9 @@ class TaskRow extends DataClass implements Insertable<TaskRow> {
       reminderMinutes: data.reminderMinutes.present
           ? data.reminderMinutes.value
           : this.reminderMinutes,
+      reminderEnabled: data.reminderEnabled.present
+          ? data.reminderEnabled.value
+          : this.reminderEnabled,
       status: data.status.present ? data.status.value : this.status,
       priority: data.priority.present ? data.priority.value : this.priority,
       version: data.version.present ? data.version.value : this.version,
@@ -459,11 +536,14 @@ class TaskRow extends DataClass implements Insertable<TaskRow> {
           ..write('ownerUserId: $ownerUserId, ')
           ..write('title: $title, ')
           ..write('description: $description, ')
+          ..write('kind: $kind, ')
+          ..write('location: $location, ')
           ..write('startAt: $startAt, ')
           ..write('endAt: $endAt, ')
           ..write('timezoneId: $timezoneId, ')
           ..write('repeatRuleJson: $repeatRuleJson, ')
           ..write('reminderMinutes: $reminderMinutes, ')
+          ..write('reminderEnabled: $reminderEnabled, ')
           ..write('status: $status, ')
           ..write('priority: $priority, ')
           ..write('version: $version, ')
@@ -480,11 +560,14 @@ class TaskRow extends DataClass implements Insertable<TaskRow> {
       ownerUserId,
       title,
       description,
+      kind,
+      location,
       startAt,
       endAt,
       timezoneId,
       repeatRuleJson,
       reminderMinutes,
+      reminderEnabled,
       status,
       priority,
       version,
@@ -499,11 +582,14 @@ class TaskRow extends DataClass implements Insertable<TaskRow> {
           other.ownerUserId == this.ownerUserId &&
           other.title == this.title &&
           other.description == this.description &&
+          other.kind == this.kind &&
+          other.location == this.location &&
           other.startAt == this.startAt &&
           other.endAt == this.endAt &&
           other.timezoneId == this.timezoneId &&
           other.repeatRuleJson == this.repeatRuleJson &&
           other.reminderMinutes == this.reminderMinutes &&
+          other.reminderEnabled == this.reminderEnabled &&
           other.status == this.status &&
           other.priority == this.priority &&
           other.version == this.version &&
@@ -517,11 +603,14 @@ class TaskRowsCompanion extends UpdateCompanion<TaskRow> {
   final Value<String?> ownerUserId;
   final Value<String> title;
   final Value<String> description;
+  final Value<String> kind;
+  final Value<String> location;
   final Value<DateTime> startAt;
   final Value<DateTime> endAt;
   final Value<String> timezoneId;
   final Value<String> repeatRuleJson;
   final Value<int> reminderMinutes;
+  final Value<bool> reminderEnabled;
   final Value<String> status;
   final Value<int> priority;
   final Value<int> version;
@@ -534,11 +623,14 @@ class TaskRowsCompanion extends UpdateCompanion<TaskRow> {
     this.ownerUserId = const Value.absent(),
     this.title = const Value.absent(),
     this.description = const Value.absent(),
+    this.kind = const Value.absent(),
+    this.location = const Value.absent(),
     this.startAt = const Value.absent(),
     this.endAt = const Value.absent(),
     this.timezoneId = const Value.absent(),
     this.repeatRuleJson = const Value.absent(),
     this.reminderMinutes = const Value.absent(),
+    this.reminderEnabled = const Value.absent(),
     this.status = const Value.absent(),
     this.priority = const Value.absent(),
     this.version = const Value.absent(),
@@ -552,11 +644,14 @@ class TaskRowsCompanion extends UpdateCompanion<TaskRow> {
     this.ownerUserId = const Value.absent(),
     required String title,
     this.description = const Value.absent(),
+    this.kind = const Value.absent(),
+    this.location = const Value.absent(),
     required DateTime startAt,
     required DateTime endAt,
     required String timezoneId,
     this.repeatRuleJson = const Value.absent(),
     this.reminderMinutes = const Value.absent(),
+    this.reminderEnabled = const Value.absent(),
     this.status = const Value.absent(),
     this.priority = const Value.absent(),
     this.version = const Value.absent(),
@@ -576,11 +671,14 @@ class TaskRowsCompanion extends UpdateCompanion<TaskRow> {
     Expression<String>? ownerUserId,
     Expression<String>? title,
     Expression<String>? description,
+    Expression<String>? kind,
+    Expression<String>? location,
     Expression<DateTime>? startAt,
     Expression<DateTime>? endAt,
     Expression<String>? timezoneId,
     Expression<String>? repeatRuleJson,
     Expression<int>? reminderMinutes,
+    Expression<bool>? reminderEnabled,
     Expression<String>? status,
     Expression<int>? priority,
     Expression<int>? version,
@@ -594,11 +692,14 @@ class TaskRowsCompanion extends UpdateCompanion<TaskRow> {
       if (ownerUserId != null) 'owner_user_id': ownerUserId,
       if (title != null) 'title': title,
       if (description != null) 'description': description,
+      if (kind != null) 'kind': kind,
+      if (location != null) 'location': location,
       if (startAt != null) 'start_at': startAt,
       if (endAt != null) 'end_at': endAt,
       if (timezoneId != null) 'timezone_id': timezoneId,
       if (repeatRuleJson != null) 'repeat_rule_json': repeatRuleJson,
       if (reminderMinutes != null) 'reminder_minutes': reminderMinutes,
+      if (reminderEnabled != null) 'reminder_enabled': reminderEnabled,
       if (status != null) 'status': status,
       if (priority != null) 'priority': priority,
       if (version != null) 'version': version,
@@ -614,11 +715,14 @@ class TaskRowsCompanion extends UpdateCompanion<TaskRow> {
       Value<String?>? ownerUserId,
       Value<String>? title,
       Value<String>? description,
+      Value<String>? kind,
+      Value<String>? location,
       Value<DateTime>? startAt,
       Value<DateTime>? endAt,
       Value<String>? timezoneId,
       Value<String>? repeatRuleJson,
       Value<int>? reminderMinutes,
+      Value<bool>? reminderEnabled,
       Value<String>? status,
       Value<int>? priority,
       Value<int>? version,
@@ -631,11 +735,14 @@ class TaskRowsCompanion extends UpdateCompanion<TaskRow> {
       ownerUserId: ownerUserId ?? this.ownerUserId,
       title: title ?? this.title,
       description: description ?? this.description,
+      kind: kind ?? this.kind,
+      location: location ?? this.location,
       startAt: startAt ?? this.startAt,
       endAt: endAt ?? this.endAt,
       timezoneId: timezoneId ?? this.timezoneId,
       repeatRuleJson: repeatRuleJson ?? this.repeatRuleJson,
       reminderMinutes: reminderMinutes ?? this.reminderMinutes,
+      reminderEnabled: reminderEnabled ?? this.reminderEnabled,
       status: status ?? this.status,
       priority: priority ?? this.priority,
       version: version ?? this.version,
@@ -661,6 +768,12 @@ class TaskRowsCompanion extends UpdateCompanion<TaskRow> {
     if (description.present) {
       map['description'] = Variable<String>(description.value);
     }
+    if (kind.present) {
+      map['kind'] = Variable<String>(kind.value);
+    }
+    if (location.present) {
+      map['location'] = Variable<String>(location.value);
+    }
     if (startAt.present) {
       map['start_at'] = Variable<DateTime>(startAt.value);
     }
@@ -675,6 +788,9 @@ class TaskRowsCompanion extends UpdateCompanion<TaskRow> {
     }
     if (reminderMinutes.present) {
       map['reminder_minutes'] = Variable<int>(reminderMinutes.value);
+    }
+    if (reminderEnabled.present) {
+      map['reminder_enabled'] = Variable<bool>(reminderEnabled.value);
     }
     if (status.present) {
       map['status'] = Variable<String>(status.value);
@@ -707,11 +823,14 @@ class TaskRowsCompanion extends UpdateCompanion<TaskRow> {
           ..write('ownerUserId: $ownerUserId, ')
           ..write('title: $title, ')
           ..write('description: $description, ')
+          ..write('kind: $kind, ')
+          ..write('location: $location, ')
           ..write('startAt: $startAt, ')
           ..write('endAt: $endAt, ')
           ..write('timezoneId: $timezoneId, ')
           ..write('repeatRuleJson: $repeatRuleJson, ')
           ..write('reminderMinutes: $reminderMinutes, ')
+          ..write('reminderEnabled: $reminderEnabled, ')
           ..write('status: $status, ')
           ..write('priority: $priority, ')
           ..write('version: $version, ')
@@ -1258,11 +1377,14 @@ typedef $$TaskRowsTableCreateCompanionBuilder = TaskRowsCompanion Function({
   Value<String?> ownerUserId,
   required String title,
   Value<String> description,
+  Value<String> kind,
+  Value<String> location,
   required DateTime startAt,
   required DateTime endAt,
   required String timezoneId,
   Value<String> repeatRuleJson,
   Value<int> reminderMinutes,
+  Value<bool> reminderEnabled,
   Value<String> status,
   Value<int> priority,
   Value<int> version,
@@ -1276,11 +1398,14 @@ typedef $$TaskRowsTableUpdateCompanionBuilder = TaskRowsCompanion Function({
   Value<String?> ownerUserId,
   Value<String> title,
   Value<String> description,
+  Value<String> kind,
+  Value<String> location,
   Value<DateTime> startAt,
   Value<DateTime> endAt,
   Value<String> timezoneId,
   Value<String> repeatRuleJson,
   Value<int> reminderMinutes,
+  Value<bool> reminderEnabled,
   Value<String> status,
   Value<int> priority,
   Value<int> version,
@@ -1311,6 +1436,12 @@ class $$TaskRowsTableFilterComposer
   ColumnFilters<String> get description => $composableBuilder(
       column: $table.description, builder: (column) => ColumnFilters(column));
 
+  ColumnFilters<String> get kind => $composableBuilder(
+      column: $table.kind, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get location => $composableBuilder(
+      column: $table.location, builder: (column) => ColumnFilters(column));
+
   ColumnFilters<DateTime> get startAt => $composableBuilder(
       column: $table.startAt, builder: (column) => ColumnFilters(column));
 
@@ -1326,6 +1457,10 @@ class $$TaskRowsTableFilterComposer
 
   ColumnFilters<int> get reminderMinutes => $composableBuilder(
       column: $table.reminderMinutes,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get reminderEnabled => $composableBuilder(
+      column: $table.reminderEnabled,
       builder: (column) => ColumnFilters(column));
 
   ColumnFilters<String> get status => $composableBuilder(
@@ -1368,6 +1503,12 @@ class $$TaskRowsTableOrderingComposer
   ColumnOrderings<String> get description => $composableBuilder(
       column: $table.description, builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<String> get kind => $composableBuilder(
+      column: $table.kind, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get location => $composableBuilder(
+      column: $table.location, builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<DateTime> get startAt => $composableBuilder(
       column: $table.startAt, builder: (column) => ColumnOrderings(column));
 
@@ -1383,6 +1524,10 @@ class $$TaskRowsTableOrderingComposer
 
   ColumnOrderings<int> get reminderMinutes => $composableBuilder(
       column: $table.reminderMinutes,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<bool> get reminderEnabled => $composableBuilder(
+      column: $table.reminderEnabled,
       builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<String> get status => $composableBuilder(
@@ -1425,6 +1570,12 @@ class $$TaskRowsTableAnnotationComposer
   GeneratedColumn<String> get description => $composableBuilder(
       column: $table.description, builder: (column) => column);
 
+  GeneratedColumn<String> get kind =>
+      $composableBuilder(column: $table.kind, builder: (column) => column);
+
+  GeneratedColumn<String> get location =>
+      $composableBuilder(column: $table.location, builder: (column) => column);
+
   GeneratedColumn<DateTime> get startAt =>
       $composableBuilder(column: $table.startAt, builder: (column) => column);
 
@@ -1439,6 +1590,9 @@ class $$TaskRowsTableAnnotationComposer
 
   GeneratedColumn<int> get reminderMinutes => $composableBuilder(
       column: $table.reminderMinutes, builder: (column) => column);
+
+  GeneratedColumn<bool> get reminderEnabled => $composableBuilder(
+      column: $table.reminderEnabled, builder: (column) => column);
 
   GeneratedColumn<String> get status =>
       $composableBuilder(column: $table.status, builder: (column) => column);
@@ -1486,11 +1640,14 @@ class $$TaskRowsTableTableManager extends RootTableManager<
             Value<String?> ownerUserId = const Value.absent(),
             Value<String> title = const Value.absent(),
             Value<String> description = const Value.absent(),
+            Value<String> kind = const Value.absent(),
+            Value<String> location = const Value.absent(),
             Value<DateTime> startAt = const Value.absent(),
             Value<DateTime> endAt = const Value.absent(),
             Value<String> timezoneId = const Value.absent(),
             Value<String> repeatRuleJson = const Value.absent(),
             Value<int> reminderMinutes = const Value.absent(),
+            Value<bool> reminderEnabled = const Value.absent(),
             Value<String> status = const Value.absent(),
             Value<int> priority = const Value.absent(),
             Value<int> version = const Value.absent(),
@@ -1504,11 +1661,14 @@ class $$TaskRowsTableTableManager extends RootTableManager<
             ownerUserId: ownerUserId,
             title: title,
             description: description,
+            kind: kind,
+            location: location,
             startAt: startAt,
             endAt: endAt,
             timezoneId: timezoneId,
             repeatRuleJson: repeatRuleJson,
             reminderMinutes: reminderMinutes,
+            reminderEnabled: reminderEnabled,
             status: status,
             priority: priority,
             version: version,
@@ -1522,11 +1682,14 @@ class $$TaskRowsTableTableManager extends RootTableManager<
             Value<String?> ownerUserId = const Value.absent(),
             required String title,
             Value<String> description = const Value.absent(),
+            Value<String> kind = const Value.absent(),
+            Value<String> location = const Value.absent(),
             required DateTime startAt,
             required DateTime endAt,
             required String timezoneId,
             Value<String> repeatRuleJson = const Value.absent(),
             Value<int> reminderMinutes = const Value.absent(),
+            Value<bool> reminderEnabled = const Value.absent(),
             Value<String> status = const Value.absent(),
             Value<int> priority = const Value.absent(),
             Value<int> version = const Value.absent(),
@@ -1540,11 +1703,14 @@ class $$TaskRowsTableTableManager extends RootTableManager<
             ownerUserId: ownerUserId,
             title: title,
             description: description,
+            kind: kind,
+            location: location,
             startAt: startAt,
             endAt: endAt,
             timezoneId: timezoneId,
             repeatRuleJson: repeatRuleJson,
             reminderMinutes: reminderMinutes,
+            reminderEnabled: reminderEnabled,
             status: status,
             priority: priority,
             version: version,

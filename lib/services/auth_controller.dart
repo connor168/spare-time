@@ -1,15 +1,18 @@
 import 'package:flutter/foundation.dart';
 
 import 'auth_session_store.dart';
+import 'focus_flow_client.dart';
 import 'supabase_rest_client.dart';
+import 'wechat_auth.dart';
 
 enum AuthStatus { signedOut, loading, signedIn, needsEmailConfirmation, error }
 
 class AuthController extends ChangeNotifier {
-  AuthController({required this.client, required this.store});
+  AuthController({required this.client, required this.store, this.wechatAuth});
 
-  final SupabaseRestClient client;
+  final FocusFlowClient client;
   final AuthSessionStore store;
+  final WeChatAuth? wechatAuth;
 
   AuthStatus status = AuthStatus.signedOut;
   SupabaseSession? session;
@@ -82,6 +85,23 @@ class AuthController extends ChangeNotifier {
       status = AuthStatus.needsEmailConfirmation;
       errorMessage = null;
       notifyListeners();
+    } on Object catch (error) {
+      _setError(error);
+    }
+  }
+
+  Future<void> signInWithWeChat() async {
+    final auth = wechatAuth;
+    if (auth == null) {
+      _setError(const WeChatAuthException('WeChat login is not available.'));
+      return;
+    }
+    _setLoading();
+    try {
+      final code = await auth.requestCode();
+      final signedIn = await client.signInWithWeChatCode(code);
+      await _persist(signedIn);
+      _setSignedIn(signedIn);
     } on Object catch (error) {
       _setError(error);
     }

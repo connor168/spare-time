@@ -38,7 +38,27 @@ void main() {
     expect(requests.last, contains('Bearer a'));
   });
 
-  test('task CAS payload preserves description and priority', () async {
+  test('WeChat code exchange sends an unauthenticated function request', () async {
+    final requests = <String>[];
+    final client = SupabaseRestClient(
+      url: Uri.parse('https://project.supabase.co'),
+      anonKey: 'public-key',
+      request: (method, uri, headers, body) async {
+        requests.add('$method ${uri.path} ${headers['authorization'] ?? ''} $body');
+        return const SupabaseResponse(
+          200,
+          '{"access_token":"a","refresh_token":"r","expires_in":3600,"user":{"id":"u1"}}',
+        );
+      },
+    );
+
+    final session = await client.signInWithWeChatCode(' code-1 ');
+
+    expect(session.userId, 'u1');
+    expect(requests.single, contains('POST /functions/v1/wechat-login  '));
+    expect(requests.single, contains('"code":"code-1"'));
+  });
+  test('task CAS payload preserves schedule fields and priority', () async {
     Object? sent;
     final client = SupabaseRestClient(
       url: Uri.parse('https://project.supabase.co'),
@@ -56,9 +76,13 @@ void main() {
         id: '00000000-0000-0000-0000-000000000001',
         title: 'Task',
         description: 'Keep this text',
+        kind: ScheduleItemKind.course,
+        location: 'Room 301',
         startAt: now,
         endAt: now.add(const Duration(hours: 1)),
         timeZoneId: 'UTC',
+        reminderEnabled: false,
+        status: TaskStatus.todayIncomplete,
         priority: 3,
       )
     ]);
@@ -66,6 +90,10 @@ void main() {
     final task =
         (sent as Map<String, dynamic>)['p_task'] as Map<String, dynamic>;
     expect(task['description'], 'Keep this text');
+    expect(task['kind'], 'course');
+    expect(task['location'], 'Room 301');
+    expect(task['reminder_enabled'], isFalse);
+    expect(task['status'], 'today_incomplete');
     expect(task['priority'], 3);
     expect(task['base_version'], 0);
     expect(task, isNot(contains('user_id')));

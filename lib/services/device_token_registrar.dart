@@ -4,6 +4,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:huawei_push/huawei_push.dart';
 
 import 'supabase_rest_client.dart';
+import 'focus_flow_client.dart';
 
 enum PushProvider { fcm, apns, hms }
 
@@ -49,11 +50,15 @@ class HuaweiDeviceTokenSource implements DeviceTokenSource {
 
 class DeviceTokenRegistrar {
   DeviceTokenRegistrar(
-      {required this.supabase,
+      {FocusFlowClient? client,
+      SupabaseRestClient? supabase,
       required this.source,
-      this.platform = 'android'});
+      this.platform = 'android'})
+      : client = client ??
+            supabase ??
+            (throw ArgumentError('A Focus Flow client is required.'));
 
-  final SupabaseRestClient supabase;
+  final FocusFlowClient client;
   final DeviceTokenSource source;
   final String platform;
   StreamSubscription<String>? _subscription;
@@ -84,12 +89,12 @@ class DeviceTokenRegistrar {
   }
 
   Future<void> _processRetryQueue() async {
-    if (_pendingRevocations.isEmpty || supabase.session == null) return;
+    if (_pendingRevocations.isEmpty || client.session == null) return;
     final batch = Map<String, int>.from(_pendingRevocations);
     _pendingRevocations.clear();
     for (final entry in batch.entries) {
       try {
-        await supabase.revokeDeviceToken(entry.key);
+        await client.revokeDeviceToken(entry.key);
       } on Object {
         final attempts = entry.value + 1;
         if (attempts < _maxRetries) {
@@ -111,9 +116,9 @@ class DeviceTokenRegistrar {
     await dispose();
     final token = _currentToken;
     _currentToken = null;
-    if (token == null || token.isEmpty || supabase.session == null) return;
+    if (token == null || token.isEmpty || client.session == null) return;
     try {
-      await supabase.revokeDeviceToken(token);
+      await client.revokeDeviceToken(token);
     } on Object {
       _pendingRevocations[token] = 1;
       _scheduleRetry();
@@ -121,8 +126,8 @@ class DeviceTokenRegistrar {
   }
 
   Future<void> _register(String? token) async {
-    if (token == null || token.isEmpty || supabase.session == null) return;
-    await supabase.registerDeviceToken(
+    if (token == null || token.isEmpty || client.session == null) return;
+    await client.registerDeviceToken(
         platform: platform, provider: source.provider.name, token: token);
   }
 
@@ -132,7 +137,7 @@ class DeviceTokenRegistrar {
     _currentToken = token;
     if (previous != null && previous.isNotEmpty && previous != token) {
       try {
-        await supabase.revokeDeviceToken(previous);
+        await client.revokeDeviceToken(previous);
       } on Object {
         _pendingRevocations[previous] = 1;
         _scheduleRetry();

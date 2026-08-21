@@ -1,5 +1,37 @@
 enum TaskRecurrence { none, daily, weekly }
 
+enum ScheduleItemKind { task, course, timeBlock }
+
+enum TaskStatus { planned, completed, todayIncomplete }
+
+extension ScheduleItemKindStorage on ScheduleItemKind {
+  String get storageValue => switch (this) {
+        ScheduleItemKind.task => 'task',
+        ScheduleItemKind.course => 'course',
+        ScheduleItemKind.timeBlock => 'time_block',
+      };
+}
+
+ScheduleItemKind scheduleItemKindFromStorage(Object? value) => switch (value) {
+      'course' => ScheduleItemKind.course,
+      'time_block' || 'timeBlock' => ScheduleItemKind.timeBlock,
+      _ => ScheduleItemKind.task,
+    };
+
+extension TaskStatusStorage on TaskStatus {
+  String get storageValue => switch (this) {
+        TaskStatus.planned => 'planned',
+        TaskStatus.completed => 'completed',
+        TaskStatus.todayIncomplete => 'today_incomplete',
+      };
+}
+
+TaskStatus taskStatusFromStorage(Object? value) => switch (value) {
+      'completed' => TaskStatus.completed,
+      'today_incomplete' || 'todayIncomplete' => TaskStatus.todayIncomplete,
+      _ => TaskStatus.planned,
+    };
+
 const _notProvided = Object();
 
 class PlannerTask {
@@ -10,15 +42,25 @@ class PlannerTask {
     required this.endAt,
     required this.timeZoneId,
     this.description = '',
+    this.kind = ScheduleItemKind.task,
+    this.location = '',
     this.priority = 2,
-    this.reminderMinutes = 0,
+    this.reminderMinutes = 5,
+    this.reminderEnabled = true,
     this.recurrence = TaskRecurrence.none,
-    this.isCompleted = false,
+    TaskStatus status = TaskStatus.planned,
+    bool? isCompleted,
     DateTime? createdAt,
     DateTime? updatedAt,
     this.version = 1,
     this.deletedAt,
-  }) {
+  }) : status = isCompleted == null
+            ? status
+            : isCompleted
+                ? TaskStatus.completed
+                : status == TaskStatus.completed
+                    ? TaskStatus.planned
+                    : status {
     if (title.trim().isEmpty) {
       throw ArgumentError.value(title, 'title', 'Task title cannot be empty.');
     }
@@ -51,17 +93,22 @@ class PlannerTask {
   final String id;
   final String title;
   final String description;
+  final ScheduleItemKind kind;
+  final String location;
   final DateTime startAt;
   final DateTime endAt;
   final String timeZoneId;
   final int reminderMinutes;
+  final bool reminderEnabled;
   final int priority;
   final TaskRecurrence recurrence;
-  final bool isCompleted;
+  final TaskStatus status;
   late final DateTime createdAt;
   late final DateTime updatedAt;
   final int version;
   final DateTime? deletedAt;
+
+  bool get isCompleted => status == TaskStatus.completed;
 
   DateTime get notificationAt =>
       startAt.subtract(Duration(minutes: reminderMinutes));
@@ -71,29 +118,44 @@ class PlannerTask {
   PlannerTask copyWith({
     String? title,
     String? description,
+    ScheduleItemKind? kind,
+    String? location,
     DateTime? startAt,
     DateTime? endAt,
     String? timeZoneId,
     int? reminderMinutes,
+    bool? reminderEnabled,
     int? priority,
     TaskRecurrence? recurrence,
+    TaskStatus? status,
     bool? isCompleted,
     DateTime? createdAt,
     DateTime? updatedAt,
     int? version,
     Object? deletedAt = _notProvided,
   }) {
+    final nextStatus = isCompleted == null
+        ? status ?? this.status
+        : isCompleted
+            ? TaskStatus.completed
+            : status ??
+                (this.status == TaskStatus.completed
+                    ? TaskStatus.planned
+                    : this.status);
     return PlannerTask(
       id: id,
       title: title ?? this.title,
       description: description ?? this.description,
+      kind: kind ?? this.kind,
+      location: location ?? this.location,
       startAt: startAt ?? this.startAt,
       endAt: endAt ?? this.endAt,
       timeZoneId: timeZoneId ?? this.timeZoneId,
       reminderMinutes: reminderMinutes ?? this.reminderMinutes,
+      reminderEnabled: reminderEnabled ?? this.reminderEnabled,
       priority: priority ?? this.priority,
       recurrence: recurrence ?? this.recurrence,
-      isCompleted: isCompleted ?? this.isCompleted,
+      status: nextStatus,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       version: version ?? this.version,

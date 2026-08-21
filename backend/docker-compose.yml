@@ -1,0 +1,30 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: focusflow
+      POSTGRES_USER: focusflow
+      POSTGRES_PASSWORD: change-me
+    ports:
+      - "5432:5432"
+    volumes:
+      - focusflow_pg:/var/lib/postgresql/data
+
+  api:
+    build: .
+    environment:
+      NODE_ENV: production
+      PORT: 8080
+      DATABASE_URL: postgres://focusflow:change-me@postgres:5432/focusflow
+      JWT_SECRET: replace-with-at-least-32-random-bytes
+      JWT_ISSUER: focus-flow-api
+      ACCESS_TOKEN_TTL_SECONDS: 900
+      WECHAT_APP_ID: ${WECHAT_APP_ID:-}
+      WECHAT_APP_SECRET: ${WECHAT_APP_SECRET:-}
+    depends_on:
+      - postgres
+    ports:
+      - "8080:8080"
+
+volumes:
+  focusflow_pg:

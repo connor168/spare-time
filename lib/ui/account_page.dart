@@ -194,6 +194,15 @@ class _AccountPageState extends State<AccountPage> {
             onPressed: () => _submit(controller),
             icon: Icon(registerMode ? Icons.person_add : Icons.login),
             label: Text(registerMode ? 'Create account' : 'Sign in')),
+        if (!registerMode && controller.wechatAuth != null) ...[
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            key: const Key('account-wechat-button'),
+            onPressed: () => controller.signInWithWeChat(),
+            icon: const Icon(Icons.chat_bubble_outline),
+            label: const Text('Continue with WeChat'),
+          ),
+        ],
         TextButton.icon(
             onPressed: () => setState(() {
                   registerMode = !registerMode;

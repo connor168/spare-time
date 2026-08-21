@@ -29,3 +29,11 @@ ios/Runner/Runner.entitlements
 
 android/focus-flow-upload.jks
 android/key.properties
+# Local Focus Flow API dependencies and secrets
+backend/node_modules/
+backend/.env
+backend/dist/
+.codex_flutter_appdata/
+.codex_flutter_localappdata/
+.codex_flutter_runtime/
+npm-cache/

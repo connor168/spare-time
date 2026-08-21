@@ -20,12 +20,16 @@ void main() {
       id: 'task-1',
       title: 'Daily review',
       description: 'Review the complete backlog.',
+      kind: ScheduleItemKind.course,
+      location: 'Room 301',
       startAt: DateTime.utc(2026, 8, 8, 9),
       endAt: DateTime.utc(2026, 8, 8, 10),
       timeZoneId: 'Asia/Tokyo',
       recurrence: TaskRecurrence.daily,
       reminderMinutes: 15,
+      reminderEnabled: false,
       priority: 3,
+      status: TaskStatus.todayIncomplete,
     );
 
     await repository.saveTask(task);
@@ -34,6 +38,10 @@ void main() {
     expect(loaded, hasLength(1));
     expect(loaded.single.recurrence, TaskRecurrence.daily);
     expect(loaded.single.description, 'Review the complete backlog.');
+    expect(loaded.single.kind, ScheduleItemKind.course);
+    expect(loaded.single.location, 'Room 301');
+    expect(loaded.single.status, TaskStatus.todayIncomplete);
+    expect(loaded.single.reminderEnabled, isFalse);
     expect(loaded.single.priority, 3);
     expect(loaded.single.notificationAt, DateTime.utc(2026, 8, 8, 8, 45));
   });

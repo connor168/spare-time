@@ -67,4 +67,29 @@ void main() {
     expect(completed.isCompleted, isTrue);
     expect(completed.isOverdueAt(end.add(const Duration(minutes: 1))), isFalse);
   });
+
+  test('uses schedule defaults and preserves legacy completion calls', () {
+    final task = buildTask(reminderMinutes: 5);
+
+    expect(task.kind, ScheduleItemKind.task);
+    expect(task.location, isEmpty);
+    expect(task.status, TaskStatus.planned);
+    expect(task.reminderEnabled, isTrue);
+
+    final incomplete = task.copyWith(status: TaskStatus.todayIncomplete);
+    expect(incomplete.status, TaskStatus.todayIncomplete);
+    expect(incomplete.isCompleted, isFalse);
+    expect(incomplete.copyWith(isCompleted: true).status, TaskStatus.completed);
+    expect(incomplete.copyWith(isCompleted: false).status,
+        TaskStatus.todayIncomplete);
+  });
+
+  test('serializes enum values for local and cloud storage', () {
+    expect(ScheduleItemKind.timeBlock.storageValue, 'time_block');
+    expect(
+        scheduleItemKindFromStorage('time_block'), ScheduleItemKind.timeBlock);
+    expect(TaskStatus.todayIncomplete.storageValue, 'today_incomplete');
+    expect(
+        taskStatusFromStorage('today_incomplete'), TaskStatus.todayIncomplete);
+  });
 }

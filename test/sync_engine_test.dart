@@ -283,4 +283,51 @@ void main() {
     expect(report.conflicts, 1);
     expect((await notes.loadNotes()).single.title, 'Local version');
   });
+
+  test('pulls schedule metadata and today-incomplete status', () async {
+    final now = DateTime.utc(2026, 8, 8, 9);
+    final remoteTasks = jsonEncode([
+      {
+        'id': 'task-1',
+        'title': 'Linear algebra',
+        'description': '',
+        'kind': 'course',
+        'location': 'Teaching Building A-201',
+        'start_at': now.toIso8601String(),
+        'end_at': now.add(const Duration(hours: 1)).toIso8601String(),
+        'timezone_id': 'UTC',
+        'repeat_rule': {'type': 'weekly'},
+        'reminder_minutes': 5,
+        'reminder_enabled': false,
+        'status': 'today_incomplete',
+        'priority': 2,
+        'version': 1,
+        'created_at': now.toIso8601String(),
+        'updated_at': now.toIso8601String(),
+        'deleted_at': null,
+      }
+    ]);
+    final tasks = InMemoryTaskRepository(ownerUserId: session.userId);
+    final client = SupabaseRestClient(
+      url: Uri.parse('https://project.supabase.co'),
+      anonKey: 'public-key',
+      request: (method, uri, headers, body) async =>
+          method == 'GET' && uri.path.endsWith('/tasks')
+              ? SupabaseResponse(200, remoteTasks)
+              : const SupabaseResponse(200, '[]'),
+    )..setSession(session);
+
+    final report = await SyncEngine(
+      client: client,
+      tasks: tasks,
+      notes: InMemoryNoteRepository(ownerUserId: session.userId),
+    ).sync();
+    final pulled = (await tasks.loadTasks()).single;
+
+    expect(report.pulled, 1);
+    expect(pulled.kind, ScheduleItemKind.course);
+    expect(pulled.location, 'Teaching Building A-201');
+    expect(pulled.reminderEnabled, isFalse);
+    expect(pulled.status, TaskStatus.todayIncomplete);
+  });
 }

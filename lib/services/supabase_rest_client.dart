@@ -3,6 +3,7 @@ import 'dart:io';
 
 import '../domain/knowledge_note.dart';
 import '../domain/planner_task.dart';
+import 'focus_flow_client.dart';
 
 typedef SupabaseRequest = Future<SupabaseResponse> Function(
     String method, Uri uri, Map<String, String> headers, String? body);
@@ -68,7 +69,7 @@ class SupabaseSession {
       };
 }
 
-class SupabaseRestClient {
+class SupabaseRestClient implements FocusFlowClient {
   SupabaseRestClient(
       {required this.url, required this.anonKey, SupabaseRequest? request})
       : _request = request ?? _defaultRequest;
@@ -78,12 +79,16 @@ class SupabaseRestClient {
   final SupabaseRequest _request;
   SupabaseSession? _session;
 
+  @override
   SupabaseSession? get session => _session;
 
+  @override
   void setSession(SupabaseSession session) => _session = session;
 
+  @override
   void clearSession() => _session = null;
 
+  @override
   Future<SupabaseSession> signIn(
       {required String email, required String password}) async {
     final response = await _send('POST', '/auth/v1/token?grant_type=password',
@@ -93,6 +98,21 @@ class SupabaseRestClient {
     return _session = _sessionFromResponse(json);
   }
 
+  @override
+  Future<SupabaseSession> signInWithWeChatCode(String code) async {
+    if (code.trim().isEmpty) {
+      throw const FormatException('WeChat authorization code is empty.');
+    }
+    final response = await _send(
+      'POST',
+      '/functions/v1/wechat-login',
+      {'code': code.trim()},
+      authorized: false,
+    );
+    return _session = _sessionFromResponse(_decode(response));
+  }
+
+  @override
   Future<SupabaseSession> signUp(
       {required String email, required String password}) async {
     final response = await _send(
@@ -106,6 +126,7 @@ class SupabaseRestClient {
     return _session = _sessionFromResponse(json);
   }
 
+  @override
   Future<SupabaseSession> refreshSession() async {
     final current = _session;
     if (current == null || current.refreshToken.isEmpty) {
@@ -124,6 +145,7 @@ class SupabaseRestClient {
     );
   }
 
+  @override
   Future<void> signOut() async {
     if (_session != null) {
       await _send('POST', '/auth/v1/logout', null);
@@ -131,6 +153,7 @@ class SupabaseRestClient {
     _session = null;
   }
 
+  @override
   Future<SyncWriteResult> syncNotes(
     Iterable<KnowledgeNote> notes, {
     Map<String, int> baseVersions = const {},
@@ -157,6 +180,7 @@ class SupabaseRestClient {
     );
   }
 
+  @override
   Future<SyncWriteResult> syncTasks(
     Iterable<PlannerTask> tasks, {
     Map<String, int> baseVersions = const {},
@@ -169,12 +193,15 @@ class SupabaseRestClient {
             'id': task.id,
             'title': task.title,
             'description': task.description,
+            'kind': task.kind.storageValue,
+            'location': task.location,
             'start_at': task.startAt.toUtc().toIso8601String(),
             'end_at': task.endAt.toUtc().toIso8601String(),
             'timezone_id': task.timeZoneId,
             'repeat_rule': {'type': task.recurrence.name},
             'reminder_minutes': task.reminderMinutes,
-            'status': task.isCompleted ? 'completed' : 'planned',
+            'reminder_enabled': task.reminderEnabled,
+            'status': task.status.storageValue,
             'priority': task.priority,
             'version': task.version,
             'base_version':
@@ -188,6 +215,7 @@ class SupabaseRestClient {
     );
   }
 
+  @override
   Future<void> registerDeviceToken(
       {required String platform,
       required String provider,
@@ -202,6 +230,7 @@ class SupabaseRestClient {
     });
   }
 
+  @override
   Future<void> revokeDeviceToken(String token) async {
     if (_session == null) {
       throw StateError('Sign in before revoking a device token.');
@@ -211,6 +240,7 @@ class SupabaseRestClient {
     });
   }
 
+  @override
   Future<Map<String, dynamic>> exportMyData() async {
     if (_session == null) {
       throw StateError('Sign in before exporting data.');
@@ -219,6 +249,7 @@ class SupabaseRestClient {
     return _decode(response);
   }
 
+  @override
   Future<void> deleteMyAccount() async {
     if (_session == null) {
       throw StateError('Sign in before deleting account.');
@@ -227,10 +258,12 @@ class SupabaseRestClient {
     _session = null;
   }
 
+  @override
   Future<List<Map<String, dynamic>>> fetchNotes() async {
     return _fetchAll('notes');
   }
 
+  @override
   Future<List<Map<String, dynamic>>> fetchTasks() async {
     return _fetchAll('tasks');
   }

@@ -1,0 +1,13 @@
+@echo off
+setlocal EnableExtensions
+set "ROOT=%~dp0.."
+set "RUNTIME=%ROOT%\.codex_flutter_runtime"
+set "APPDATA=%RUNTIME%\appdata"
+set "LOCALAPPDATA=%RUNTIME%\localappdata"
+set "TEMP=%RUNTIME%\temp"
+set "TMP=%RUNTIME%\temp"
+set "PUB_CACHE=%RUNTIME%\pubcache"
+set "USERPROFILE=%RUNTIME%"
+set "HOME=%RUNTIME%"
+call "%ROOT%\.tools\flutter\bin\flutter.bat" --no-version-check analyze --no-pub
+endlocal

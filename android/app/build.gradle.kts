@@ -79,4 +79,13 @@ flutter {
 
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.3")
+    val localWechatAar = rootProject.file(
+        "../.tools/local-maven/com/tencent/mm/opensdk/wechat-sdk-android-without-mta/6.8.0/" +
+            "wechat-sdk-android-without-mta-6.8.0.aar",
+    )
+    if (localWechatAar.isFile) {
+        implementation(files(localWechatAar))
+    } else {
+        implementation("com.tencent.mm.opensdk:wechat-sdk-android-without-mta:6.8.0")
+    }
 }

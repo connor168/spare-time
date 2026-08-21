@@ -16,8 +16,11 @@ import 'domain/knowledge_note.dart';
 import 'domain/news_item.dart';
 import 'domain/planner_task.dart';
 import 'services/flutter_notification_scheduler.dart';
+import 'services/focus_flow_api_client.dart';
+import 'services/focus_flow_client.dart';
 import 'services/github_digest_client.dart';
 import 'services/notification_scheduler.dart';
+import 'services/course_reminder_preference_store.dart';
 import 'services/app_config.dart';
 import 'services/auth_controller.dart';
 import 'services/auth_session_store.dart';
@@ -25,8 +28,10 @@ import 'services/device_token_registrar.dart';
 import 'services/deep_link_handler.dart';
 import 'services/supabase_rest_client.dart';
 import 'services/sync_engine.dart';
+import 'services/wechat_auth.dart';
 import 'ui/account_page.dart';
 import 'ui/add_task_dialog.dart';
+import 'ui/schedule_history_view.dart';
 import 'ui/window_class.dart';
 
 Future<void> main() async {
@@ -41,17 +46,22 @@ Future<void> main() async {
   await scheduler.initialize();
   const digestUrl = String.fromEnvironment('GITHUB_DIGEST_URL');
   final config = AppConfig.fromEnvironment();
-  final cloudClient = config.hasSupabase
-      ? SupabaseRestClient(
-          url: config.supabaseUrl!, anonKey: config.supabaseAnonKey!)
-      : null;
+  final FocusFlowClient? cloudClient = config.hasFocusFlowApi
+      ? FocusFlowApiClient(baseUrl: config.focusFlowApiUrl!)
+      : config.hasSupabase
+          ? SupabaseRestClient(
+              url: config.supabaseUrl!, anonKey: config.supabaseAnonKey!)
+          : null;
   final authController = cloudClient == null
       ? null
       : AuthController(
           client: cloudClient,
           store: Platform.isWindows
               ? InMemoryAuthSessionStore()
-              : SecureAuthSessionStore());
+              : SecureAuthSessionStore(),
+          wechatAuth: Platform.isAndroid && config.wechatAppId != null
+              ? MethodChannelWeChatAuth(appId: config.wechatAppId!)
+              : null);
   await authController?.restore();
   final ownerUserId = authController?.session?.userId;
   runApp(FocusFlowApp(
@@ -67,6 +77,9 @@ Future<void> main() async {
       authController: authController,
       cloudClient: cloudClient,
       scheduler: scheduler,
+      courseReminderPreferenceStore: Platform.isAndroid
+          ? SecureCourseReminderPreferenceStore()
+          : InMemoryCourseReminderPreferenceStore(),
       database: database));
 }
 
@@ -106,14 +119,16 @@ class FocusFlowApp extends StatelessWidget {
       this.authController,
       this.cloudClient,
       this.scheduler,
+      this.courseReminderPreferenceStore,
       this.database});
 
   final TaskRepository? repository;
   final NoteRepository? noteRepository;
   final GitHubDigestClient? newsClient;
   final AuthController? authController;
-  final SupabaseRestClient? cloudClient;
+  final FocusFlowClient? cloudClient;
   final NotificationScheduler? scheduler;
+  final CourseReminderPreferenceStore? courseReminderPreferenceStore;
   final AppDatabase? database;
 
   @override
@@ -144,6 +159,7 @@ class FocusFlowApp extends StatelessWidget {
           authController: authController,
           cloudClient: cloudClient,
           scheduler: scheduler,
+          courseReminderPreferenceStore: courseReminderPreferenceStore,
           database: database),
     );
   }
@@ -158,14 +174,16 @@ class FocusFlowShell extends StatefulWidget {
       this.authController,
       this.cloudClient,
       this.scheduler,
+      this.courseReminderPreferenceStore,
       this.database});
 
   final TaskRepository? repository;
   final NoteRepository? noteRepository;
   final GitHubDigestClient? newsClient;
   final AuthController? authController;
-  final SupabaseRestClient? cloudClient;
+  final FocusFlowClient? cloudClient;
   final NotificationScheduler? scheduler;
+  final CourseReminderPreferenceStore? courseReminderPreferenceStore;
   final AppDatabase? database;
 
   @override
@@ -214,7 +232,12 @@ class _FocusFlowShellState extends State<FocusFlowShell>
       ]);
   late final NotificationScheduler scheduler =
       widget.scheduler ?? const NoopNotificationScheduler();
+  late final CourseReminderPreferenceStore courseReminderPreferenceStore =
+      widget.courseReminderPreferenceStore ??
+          InMemoryCourseReminderPreferenceStore();
   final tasks = <PlannerTask>[];
+  bool courseRemindersEnabled = true;
+  late final Future<void> _courseReminderPreferenceReady;
   bool isLoading = true;
   final notes = <KnowledgeNote>[];
   DeviceTokenRegistrar? tokenRegistrar;
@@ -231,6 +254,9 @@ class _FocusFlowShellState extends State<FocusFlowShell>
   @override
   void initState() {
     super.initState();
+    // Widget tests can construct the shell without calling main().
+    tz_data.initializeTimeZones();
+    _courseReminderPreferenceReady = _loadCourseReminderPreference();
     WidgetsBinding.instance.addObserver(this);
     widget.authController?.addListener(_onAuthChanged);
     if (widget.repository == null && widget.noteRepository == null) {
@@ -251,6 +277,15 @@ class _FocusFlowShellState extends State<FocusFlowShell>
     if (widget.authController?.status == AuthStatus.signedIn) {
       unawaited(_ensureTokenRegistration(_authGeneration));
       unawaited(_refreshGuestDataCounts(_authGeneration));
+    }
+  }
+
+  Future<void> _loadCourseReminderPreference() async {
+    try {
+      final enabled = await courseReminderPreferenceStore.load();
+      if (mounted) setState(() => courseRemindersEnabled = enabled);
+    } on Object {
+      // A local storage failure must not prevent the planner from opening.
     }
   }
 
@@ -296,7 +331,7 @@ class _FocusFlowShellState extends State<FocusFlowShell>
 
   void _navigateDeepLink(DeepLinkEvent event) {
     if (!mounted || event.route != DeepLinkRoute.newsDaily) return;
-    setState(() => selectedIndex = 1);
+    setState(() => selectedIndex = 2);
   }
 
   Future<DeviceTokenSource> _detectPushSource() async {
@@ -357,7 +392,8 @@ class _FocusFlowShellState extends State<FocusFlowShell>
     _notificationQueue =
         _notificationQueue.catchError((Object _) {}).then((_) async {
       if (generation != _authGeneration) return;
-      await scheduler.rescheduleAll(loaded.where((task) => !task.isCompleted));
+      await _courseReminderPreferenceReady;
+      await scheduler.rescheduleAll(loaded.where(_shouldScheduleReminder));
     });
     await _notificationQueue;
   }
@@ -414,7 +450,7 @@ class _FocusFlowShellState extends State<FocusFlowShell>
       }
       final source = await _detectPushSource();
       tokenRegistrar ??= DeviceTokenRegistrar(
-        supabase: client!,
+        client: client!,
         source: source,
         platform: Platform.isIOS ? 'ios' : 'android',
       );
@@ -445,6 +481,10 @@ class _FocusFlowShellState extends State<FocusFlowShell>
                     icon: Icon(Icons.today_outlined),
                     selectedIcon: Icon(Icons.today),
                     label: '今日'),
+                NavigationDestination(
+                    icon: Icon(Icons.history_outlined),
+                    selectedIcon: Icon(Icons.history),
+                    label: '历史'),
                 NavigationDestination(
                     icon: Icon(Icons.auto_awesome_outlined),
                     selectedIcon: Icon(Icons.auto_awesome),
@@ -483,6 +523,10 @@ class _FocusFlowShellState extends State<FocusFlowShell>
                         selectedIcon: Icon(Icons.today),
                         label: Text('今日')),
                     NavigationRailDestination(
+                        icon: Icon(Icons.history_outlined),
+                        selectedIcon: Icon(Icons.history),
+                        label: Text('历史')),
+                    NavigationRailDestination(
                         icon: Icon(Icons.auto_awesome_outlined),
                         selectedIcon: Icon(Icons.auto_awesome),
                         label: Text('AI 资讯')),
@@ -512,11 +556,13 @@ class _FocusFlowShellState extends State<FocusFlowShell>
     }
     switch (selectedIndex) {
       case 1:
-        return _NewsView(isWide: isWide, client: widget.newsClient);
+        return ScheduleHistoryView(tasks: tasks);
       case 2:
+        return _NewsView(isWide: isWide, client: widget.newsClient);
+      case 3:
         return _KnowledgeView(
             notes: notes, isWide: isWide, onAdd: _addNote, onEdit: _editNote);
-      case 3:
+      case 4:
         final controller = widget.authController;
         return controller == null
             ? const _CloudUnavailableView()
@@ -530,10 +576,15 @@ class _FocusFlowShellState extends State<FocusFlowShell>
               );
       default:
         return _TodayView(
-          tasks: tasks,
+          tasks: _todayTasks(),
           isWide: isWide,
           onToggle: _toggleTask,
           onAdd: _addTask,
+          onEdit: _editTask,
+          onDelete: _deleteTask,
+          onMarkTodayIncomplete: _markTodayIncomplete,
+          courseRemindersEnabled: courseRemindersEnabled,
+          onCourseRemindersChanged: _setCourseRemindersEnabled,
         );
     }
   }
@@ -542,22 +593,155 @@ class _FocusFlowShellState extends State<FocusFlowShell>
     final task = await showDialog<PlannerTask>(
         context: context, builder: (context) => const AddTaskDialog());
     if (!mounted || task == null) return;
-    setState(() => tasks.add(task));
+    setState(() {
+      tasks.add(task);
+      _sortTasks();
+    });
     await repository.saveTask(task);
-    await scheduler.schedule(task);
+    await _scheduleReminder(task);
+  }
+
+  Future<void> _editTask(PlannerTask task) async {
+    final edited = await showDialog<PlannerTask>(
+      context: context,
+      builder: (context) => AddTaskDialog(original: task),
+    );
+    if (!mounted || edited == null) return;
+    final index = tasks.indexWhere((candidate) => candidate.id == task.id);
+    if (index < 0) return;
+    setState(() {
+      tasks[index] = edited;
+      _sortTasks();
+    });
+    await repository.saveTask(edited);
+    await scheduler.cancel(edited.id);
+    await _scheduleReminder(edited);
+  }
+
+  Future<void> _deleteTask(PlannerTask task) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('删除这个安排？'),
+        content: Text('“${task.title}”会从时间轴移除。'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('取消')),
+          FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('删除')),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    await repository.deleteTask(task.id);
+    await scheduler.cancel(task.id);
+    if (!mounted) return;
+    setState(() => tasks.removeWhere((candidate) => candidate.id == task.id));
   }
 
   Future<void> _toggleTask(PlannerTask task) async {
     final index = tasks.indexWhere((candidate) => candidate.id == task.id);
     if (index < 0) return;
-    final updated = task.copyWith(isCompleted: !task.isCompleted);
+    final updated = task.copyWith(
+      status: task.isCompleted ? TaskStatus.planned : TaskStatus.completed,
+    );
     setState(() => tasks[index] = updated);
     await repository.saveTask(updated);
     if (updated.isCompleted) {
       await scheduler.cancel(updated.id);
     } else {
-      await scheduler.schedule(updated);
+      await _scheduleReminder(updated);
     }
+  }
+
+  Future<void> _markTodayIncomplete(PlannerTask task) async {
+    final index = tasks.indexWhere((candidate) => candidate.id == task.id);
+    if (index < 0) return;
+    final updated = task.copyWith(status: TaskStatus.todayIncomplete);
+    setState(() => tasks[index] = updated);
+    await repository.saveTask(updated);
+    await scheduler.cancel(updated.id);
+  }
+
+  Future<void> _setCourseRemindersEnabled(bool enabled) async {
+    if (courseRemindersEnabled == enabled) return;
+    setState(() => courseRemindersEnabled = enabled);
+    try {
+      await courseReminderPreferenceStore.save(enabled);
+      final courses = tasks.where((task) =>
+          task.kind == ScheduleItemKind.course && task.reminderEnabled);
+      if (!enabled) {
+        for (final task in courses) {
+          await scheduler.cancel(task.id);
+        }
+        return;
+      }
+
+      final granted = await scheduler.requestPermissions();
+      if (!granted) {
+        await courseReminderPreferenceStore.save(false);
+        if (mounted) {
+          setState(() => courseRemindersEnabled = false);
+          _showMessage('系统通知权限未开启，课程提醒仍保持关闭。');
+        }
+        return;
+      }
+      for (final task in courses.where(_shouldScheduleReminder)) {
+        await scheduler.schedule(task);
+      }
+    } on Object {
+      if (mounted) {
+        setState(() => courseRemindersEnabled = !enabled);
+        _showMessage('提醒设置保存失败，请稍后重试。');
+      }
+    }
+  }
+
+  Future<void> _scheduleReminder(PlannerTask task) async {
+    if (!_shouldScheduleReminder(task)) {
+      await scheduler.cancel(task.id);
+      return;
+    }
+    try {
+      final granted = await scheduler.requestPermissions();
+      if (!granted) {
+        if (mounted) _showMessage('请在系统设置中允许通知，提醒才能显示在手机屏幕上。');
+        return;
+      }
+      await scheduler.schedule(task);
+    } on Object {
+      if (mounted) _showMessage('提醒创建失败，请检查通知和精确闹钟权限。');
+    }
+  }
+
+  bool _shouldScheduleReminder(PlannerTask task) {
+    if (!task.reminderEnabled || task.status != TaskStatus.planned) {
+      return false;
+    }
+    return task.kind != ScheduleItemKind.course || courseRemindersEnabled;
+  }
+
+  List<PlannerTask> _todayTasks() {
+    final location = tz.getLocation('Asia/Shanghai');
+    final today = tz.TZDateTime.now(location);
+    final result = tasks.where((task) {
+      final start = tz.TZDateTime.from(task.startAt.toUtc(), location);
+      return start.year == today.year &&
+          start.month == today.month &&
+          start.day == today.day;
+    }).toList()
+      ..sort((left, right) => left.startAt.compareTo(right.startAt));
+    return result;
+  }
+
+  void _sortTasks() =>
+      tasks.sort((left, right) => left.startAt.compareTo(right.startAt));
+
+  void _showMessage(String message) {
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _addNote() async {
@@ -706,12 +890,22 @@ class _TodayView extends StatelessWidget {
       {required this.tasks,
       required this.isWide,
       required this.onToggle,
-      required this.onAdd});
+      required this.onAdd,
+      required this.onEdit,
+      required this.onDelete,
+      required this.onMarkTodayIncomplete,
+      required this.courseRemindersEnabled,
+      required this.onCourseRemindersChanged});
 
   final List<PlannerTask> tasks;
   final bool isWide;
   final ValueChanged<PlannerTask> onToggle;
   final VoidCallback onAdd;
+  final ValueChanged<PlannerTask> onEdit;
+  final ValueChanged<PlannerTask> onDelete;
+  final ValueChanged<PlannerTask> onMarkTodayIncomplete;
+  final bool courseRemindersEnabled;
+  final ValueChanged<bool> onCourseRemindersChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -757,9 +951,21 @@ class _TodayView extends StatelessWidget {
                     _ProgressPanel(completed: completed, total: tasks.length)),
             if (isWide) ...[
               const SizedBox(width: 16),
-              const Expanded(child: _FocusPanel())
+              Expanded(child: _FocusPanel(tasks: tasks))
             ],
           ]),
+          const SizedBox(height: 16),
+          Card(
+            margin: EdgeInsets.zero,
+            child: SwitchListTile(
+              key: const Key('course-reminders-switch'),
+              value: courseRemindersEnabled,
+              onChanged: onCourseRemindersChanged,
+              secondary: const Icon(Icons.notifications_active_outlined),
+              title: const Text('课程提醒'),
+              subtitle: const Text('课程默认提前 5 分钟显示在系统通知中'),
+            ),
+          ),
           const SizedBox(height: 30),
           Text('今日时间轴',
               style: Theme.of(context)
@@ -767,8 +973,16 @@ class _TodayView extends StatelessWidget {
                   .titleLarge
                   ?.copyWith(fontWeight: FontWeight.w700)),
           const SizedBox(height: 12),
-          ...tasks.map(
-              (task) => _TaskTile(task: task, onToggle: () => onToggle(task))),
+          if (tasks.isEmpty)
+            const _EmptyTodayState()
+          else
+            ...tasks.map((task) => _TaskTile(
+                  task: task,
+                  onToggle: () => onToggle(task),
+                  onEdit: () => onEdit(task),
+                  onDelete: () => onDelete(task),
+                  onMarkTodayIncomplete: () => onMarkTodayIncomplete(task),
+                )),
         ]),
       ),
     );
@@ -821,30 +1035,60 @@ class _ProgressPanel extends StatelessWidget {
 }
 
 class _FocusPanel extends StatelessWidget {
-  const _FocusPanel();
+  const _FocusPanel({required this.tasks});
+
+  final List<PlannerTask> tasks;
 
   @override
   Widget build(BuildContext context) {
+    final now = DateTime.now().toUtc();
+    final upcoming = tasks
+        .where((task) =>
+            task.status == TaskStatus.planned && task.startAt.isAfter(now))
+        .firstOrNull;
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
           color: Colors.white, borderRadius: BorderRadius.circular(12)),
-      child: const Row(children: [
-        Icon(Icons.notifications_none, color: Color(0xff157a6e)),
-        SizedBox(width: 12),
+      child: Row(children: [
+        const Icon(Icons.notifications_none, color: Color(0xff157a6e)),
+        const SizedBox(width: 12),
         Expanded(
-            child:
-                Text('下一条提醒\n09:00 深度工作：产品规格', style: TextStyle(height: 1.5))),
+            child: Text(
+                upcoming == null
+                    ? '今天没有待开始的提醒'
+                    : '下一项\n${_clockInZone(upcoming.startAt, upcoming.timeZoneId)} ${upcoming.title}',
+                style: const TextStyle(height: 1.5))),
       ]),
     );
+  }
+
+  String _clockInZone(DateTime utcValue, String timeZoneId) {
+    try {
+      final local =
+          tz.TZDateTime.from(utcValue.toUtc(), tz.getLocation(timeZoneId));
+      return '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
+    } on Exception {
+      final local = utcValue.toLocal();
+      return '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
+    }
   }
 }
 
 class _TaskTile extends StatelessWidget {
-  const _TaskTile({required this.task, required this.onToggle});
+  const _TaskTile({
+    required this.task,
+    required this.onToggle,
+    required this.onEdit,
+    required this.onDelete,
+    required this.onMarkTodayIncomplete,
+  });
 
   final PlannerTask task;
   final VoidCallback onToggle;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+  final VoidCallback onMarkTodayIncomplete;
 
   @override
   Widget build(BuildContext context) {
@@ -855,20 +1099,54 @@ class _TaskTile extends StatelessWidget {
         borderRadius: BorderRadius.circular(10),
         clipBehavior: Clip.antiAlias,
         child: ListTile(
-          onTap: onToggle,
           leading:
               Checkbox(value: task.isCompleted, onChanged: (_) => onToggle()),
           title: Text(task.title,
               style: TextStyle(
                   decoration:
                       task.isCompleted ? TextDecoration.lineThrough : null,
-                  color: task.isCompleted ? Colors.black45 : null)),
-          subtitle: Text(
-              '${_clockInTimeZone(task.startAt, task.timeZoneId)} - ${_clockInTimeZone(task.endAt, task.timeZoneId)}'),
-          trailing: const Icon(Icons.drag_handle, color: Colors.black26),
+                  color: task.isCompleted
+                      ? Colors.black45
+                      : task.status == TaskStatus.todayIncomplete
+                          ? const Color(0xffa85f00)
+                          : null)),
+          subtitle: Text(_subtitle()),
+          trailing: PopupMenuButton<_TaskAction>(
+            tooltip: '更多操作',
+            onSelected: (action) {
+              switch (action) {
+                case _TaskAction.edit:
+                  onEdit();
+                case _TaskAction.incomplete:
+                  onMarkTodayIncomplete();
+                case _TaskAction.delete:
+                  onDelete();
+              }
+            },
+            itemBuilder: (context) => [
+              const PopupMenuItem(value: _TaskAction.edit, child: Text('编辑')),
+              if (task.status == TaskStatus.planned)
+                const PopupMenuItem(
+                    value: _TaskAction.incomplete, child: Text('标记为今日未完成')),
+              const PopupMenuItem(value: _TaskAction.delete, child: Text('删除')),
+            ],
+          ),
         ),
       ),
     );
+  }
+
+  String _subtitle() {
+    final kind = switch (task.kind) {
+      ScheduleItemKind.course => '课程',
+      ScheduleItemKind.task => '学习任务',
+      ScheduleItemKind.timeBlock => '时间段',
+    };
+    final time =
+        '${_clockInTimeZone(task.startAt, task.timeZoneId)} - ${_clockInTimeZone(task.endAt, task.timeZoneId)}';
+    final location = task.location.trim();
+    final status = task.status == TaskStatus.todayIncomplete ? ' · 今日未完成' : '';
+    return '$kind · $time${location.isEmpty ? '' : ' · $location'}$status';
   }
 
   String _clockInTimeZone(DateTime utcValue, String timeZoneId) {
@@ -884,6 +1162,33 @@ class _TaskTile extends StatelessWidget {
     final hour = value.hour.toString().padLeft(2, '0');
     final minute = value.minute.toString().padLeft(2, '0');
     return '$hour:$minute';
+  }
+}
+
+enum _TaskAction { edit, incomplete, delete }
+
+class _EmptyTodayState extends StatelessWidget {
+  const _EmptyTodayState();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 36),
+      decoration: BoxDecoration(
+          color: Colors.white, borderRadius: BorderRadius.circular(12)),
+      child: const Column(
+        children: [
+          Icon(Icons.event_available, size: 46, color: Colors.black38),
+          SizedBox(height: 10),
+          Text('今天还没有安排'),
+          SizedBox(height: 4),
+          Text('点击右上角加号创建课程、学习任务或时间段。',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.black54)),
+        ],
+      ),
+    );
   }
 }
 

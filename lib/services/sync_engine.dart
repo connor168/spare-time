@@ -3,6 +3,7 @@ import '../data/task_repository.dart';
 import '../domain/knowledge_note.dart';
 import '../domain/planner_task.dart';
 import 'supabase_rest_client.dart';
+import 'focus_flow_client.dart';
 
 class SyncReport {
   const SyncReport(
@@ -15,7 +16,7 @@ class SyncReport {
 class SyncEngine {
   SyncEngine({required this.client, required this.tasks, required this.notes});
 
-  final SupabaseRestClient client;
+  final FocusFlowClient client;
   final TaskRepository tasks;
   final NoteRepository notes;
 
@@ -147,15 +148,18 @@ class SyncEngine {
       id: row['id'] as String,
       title: row['title'] as String,
       description: row['description'] as String? ?? '',
+      kind: scheduleItemKindFromStorage(row['kind']),
+      location: row['location'] as String? ?? '',
       startAt: _date(row['start_at']),
       endAt: _date(row['end_at']),
       timeZoneId: row['timezone_id'] as String? ?? 'UTC',
-      reminderMinutes: (row['reminder_minutes'] as num? ?? 0).toInt(),
+      reminderMinutes: (row['reminder_minutes'] as num? ?? 5).toInt(),
+      reminderEnabled: row['reminder_enabled'] as bool? ?? true,
       priority: (row['priority'] as num? ?? 2).toInt(),
       recurrence: TaskRecurrence.values.firstWhere(
           (value) => value.name == type,
           orElse: () => TaskRecurrence.none),
-      isCompleted: row['status'] == 'completed',
+      status: taskStatusFromStorage(row['status']),
       version: (row['version'] as num? ?? 1).toInt(),
       createdAt: _date(row['created_at']),
       updatedAt: _date(row['updated_at']),
@@ -189,12 +193,15 @@ class SyncEngine {
   bool _sameTask(PlannerTask left, PlannerTask right) =>
       left.title == right.title &&
       left.description == right.description &&
+      left.kind == right.kind &&
+      left.location == right.location &&
       left.startAt == right.startAt &&
       left.endAt == right.endAt &&
       left.timeZoneId == right.timeZoneId &&
       left.reminderMinutes == right.reminderMinutes &&
+      left.reminderEnabled == right.reminderEnabled &&
       left.recurrence == right.recurrence &&
-      left.isCompleted == right.isCompleted &&
+      left.status == right.status &&
       left.priority == right.priority &&
       left.deletedAt == right.deletedAt;
 }

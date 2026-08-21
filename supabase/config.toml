@@ -3,3 +3,6 @@ verify_jwt = false
 
 [functions.daily-digest]
 verify_jwt = false
+
+[functions.wechat-login]
+verify_jwt = false

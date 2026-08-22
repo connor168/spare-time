@@ -20,7 +20,7 @@ GitHub digest Edge Function 每日运行后，应由服务端按 `user_preferenc
 
 ## Firebase / APNs / HMS
 
-- Android Firebase：在 Firebase 控制台创建永久包名对应的 Android App，下载 `google-services.json` 到 `android/`，并按 FlutterFire 文档启用 Cloud Messaging。
+- Android Firebase：在 Firebase 控制台创建永久包名对应的 Android App，下载真实 `google-services.json` 到 `android/app/`。本工程会在该文件存在时自动应用 Google Services Gradle 插件，然后再构建并验收 Cloud Messaging；占位 example 文件不能用于推送。
 - iOS APNs：在 macOS/Xcode 中把 `GoogleService-Info.plist` 加入 `ios/Runner`，开启 Push Notifications 和 Background Modes/Remote notifications，配置 Apple Team 与 APNs Key。示例文件仅用于说明字段，不能直接使用。
 - 华为 HMS：在 AppGallery Connect 创建同一永久包名的应用，下载 `agconnect-services.json` 到 `android/`，配置 Push Kit 服务和签名证书；代码中的 `HuaweiDeviceTokenSource` 只有在 HMS 原生配置存在时才会返回 Token。
 

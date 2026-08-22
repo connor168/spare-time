@@ -6,6 +6,13 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+// Keep local builds usable before Firebase creates the real JSON configuration.
+// Once android/app/google-services.json exists, this generates the native
+// Firebase resources consumed by Firebase.initializeApp().
+if (rootProject.file("app/google-services.json").isFile) {
+    apply(plugin = "com.google.gms.google-services")
+}
+
 val signingProperties = Properties().also { properties ->
     val file = rootProject.file("key.properties")
     if (file.exists()) file.inputStream().use(properties::load)

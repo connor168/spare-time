@@ -13,6 +13,11 @@ const config: Config = {
   accessTokenTtlSeconds: 900,
   wechatAppId: null,
   wechatAppSecret: null,
+  githubApiToken: null,
+  newsCronSecret: 'test-cron-secret',
+  fcmProjectId: null,
+  fcmClientEmail: null,
+  fcmPrivateKey: null,
 };
 
 describe('Focus Flow API', () => {
@@ -34,6 +39,29 @@ describe('Focus Flow API', () => {
       payload: { code: '' },
     });
     expect(response.statusCode).toBe(400);
+    await app.close();
+  });
+
+  it('limits daily news results to fifty items', async () => {
+    const pool = {
+      query: async (sql: string) => {
+        if (sql.includes('from news_items')) {
+          return { rows: [], rowCount: 0 };
+        }
+        return { rows: [], rowCount: 0 };
+      },
+    } as unknown as pg.Pool;
+    const app = buildApp(config, pool);
+    const session = await app.inject({ method: 'GET', url: '/api/news/daily?limit=999', headers: { authorization: `Bearer invalid` } });
+    expect(session.statusCode).toBe(401);
+    await app.close();
+  });
+
+  it('protects the scheduled news refresh endpoint', async () => {
+    const pool = { query: async () => ({ rows: [], rowCount: 0 }) } as unknown as pg.Pool;
+    const app = buildApp(config, pool);
+    const response = await app.inject({ method: 'POST', url: '/internal/news/refresh' });
+    expect(response.statusCode).toBe(401);
     await app.close();
   });
 });

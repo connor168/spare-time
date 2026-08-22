@@ -12,6 +12,11 @@ if not defined FLUTTER_PREBUILT_ENGINE_VERSION (
   exit /b 1
 )
 
+if not exist "%ROOT%\android\key.properties" (
+  echo Missing android\key.properties. Release signing is required.
+  exit /b 1
+)
+
 set "RUNTIME=%ROOT%\.codex_flutter_runtime"
 set "APPDATA=%RUNTIME%\appdata"
 set "LOCALAPPDATA=%RUNTIME%\localappdata"
@@ -26,9 +31,7 @@ set "JAVA_HOME=%ROOT%\.tools\jdk-17"
 set "GRADLE_USER_HOME=%ROOT%\.tools\gradle"
 set "FOCUS_FLOW_LOCAL_MAVEN=%ROOT%\.tools\local-maven"
 set "PATH=%JAVA_HOME%\bin;%PATH%"
-rem Allow Gradle to resolve plugin artifacts on a developer machine. The local
-rem WeChat AAR is still prepared by prepare_android_dependencies.cmd above.
 set "GRADLE_OPTS=-Djava.net.preferIPv4Stack=true -Dhttps.protocols=TLSv1.2"
 
-call "%ROOT%\.tools\flutter\bin\flutter.bat" --no-version-check build apk --debug --no-pub
+call "%ROOT%\.tools\flutter\bin\flutter.bat" --no-version-check build apk --release --no-pub
 endlocal

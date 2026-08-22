@@ -1,6 +1,7 @@
 @echo off
 setlocal EnableExtensions
 set "ROOT=%~dp0.."
+set /p FLUTTER_PREBUILT_ENGINE_VERSION=<"%ROOT%\.tools\flutter\bin\internal\engine.version"
 set "RUNTIME=%ROOT%\.codex_flutter_runtime"
 set "APPDATA=%RUNTIME%\appdata"
 set "LOCALAPPDATA=%RUNTIME%\localappdata"

@@ -6,6 +6,8 @@ import { createPool } from './db.js';
 import { hashPassword, verifyPassword } from './password.js';
 import { createRefreshToken, hashRefreshToken, issueAccessToken, verifyAccessToken } from './tokens.js';
 import { exchangeWechatCode } from './wechat.js';
+import { sendDailyDigestNotifications } from './fcm.js';
+import { refreshGitHubDigest, shanghaiDate } from './news_digest.js';
 
 type AuthBody = { mode?: 'signup'; email?: string; password?: string };
 type WechatBody = { code?: string };
@@ -97,6 +99,32 @@ export function buildApp(config: Config, pool: pg.Pool) {
     const result = await pool.query('select id, email, display_name, avatar_url, created_at from users where id = $1', [request.userId]);
     const user = result.rows[0];
     return user ? user : reply.code(404).send({ error: 'User not found' });
+  });
+
+  app.get<{ Querystring: { limit?: string } }>('/api/news/daily', { preHandler: authenticate(config) }, async (request) => {
+    const parsedLimit = Number(request.query?.limit ?? 50);
+    const limit = Number.isInteger(parsedLimit) ? Math.min(50, Math.max(1, parsedLimit)) : 50;
+    const result = await pool.query(
+      `select repository_full_name, title, summary, source_url, tags, stars, forks,
+              score, published_at, fetched_at, summary_version
+         from news_items
+        where digest_date = (current_timestamp at time zone 'Asia/Shanghai')::date
+        order by score desc, fetched_at desc
+        limit $1`,
+      [limit],
+    );
+    return { items: result.rows, stale: result.rowCount === 0 };
+  });
+
+  app.post('/internal/news/refresh', async (request, reply) => {
+    const expected = config.newsCronSecret;
+    if (!expected || request.headers['x-cron-secret'] !== expected) {
+      return reply.code(401).send({ error: 'Unauthorized' });
+    }
+    const now = new Date();
+    const refreshed = await refreshGitHubDigest(pool, config.githubApiToken, now);
+    const notificationsSent = await sendDailyDigestNotifications(pool, config, shanghaiDate(now));
+    return { refreshed, notifications_sent: notificationsSent, digest_date: shanghaiDate(now) };
   });
 
   app.post<{ Body: SyncPushBody }>('/api/sync/push', { preHandler: authenticate(config) }, async (request) => {

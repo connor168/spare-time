@@ -13,6 +13,7 @@ import 'data/database_provider.dart';
 import 'data/knowledge_note_repository.dart';
 import 'data/task_repository.dart';
 import 'domain/knowledge_note.dart';
+import 'domain/course_draft.dart';
 import 'domain/news_item.dart';
 import 'domain/planner_task.dart';
 import 'services/flutter_notification_scheduler.dart';
@@ -21,6 +22,9 @@ import 'services/focus_flow_client.dart';
 import 'services/github_digest_client.dart';
 import 'services/notification_scheduler.dart';
 import 'services/course_reminder_preference_store.dart';
+import 'services/course_schedule_parser.dart';
+import 'services/course_image_ocr.dart';
+import 'services/daily_planner.dart';
 import 'services/app_config.dart';
 import 'services/auth_controller.dart';
 import 'services/auth_session_store.dart';
@@ -558,7 +562,10 @@ class _FocusFlowShellState extends State<FocusFlowShell>
       case 1:
         return ScheduleHistoryView(tasks: tasks);
       case 2:
-        return _NewsView(isWide: isWide, client: widget.newsClient);
+        return _NewsView(
+            isWide: isWide,
+            client: widget.newsClient,
+            apiClient: widget.cloudClient);
       case 3:
         return _KnowledgeView(
             notes: notes, isWide: isWide, onAdd: _addNote, onEdit: _editNote);
@@ -585,6 +592,9 @@ class _FocusFlowShellState extends State<FocusFlowShell>
           onMarkTodayIncomplete: _markTodayIncomplete,
           courseRemindersEnabled: courseRemindersEnabled,
           onCourseRemindersChanged: _setCourseRemindersEnabled,
+          onImportCourses: _importCourses,
+          onImportCourseScreenshot: _importCourseScreenshot,
+          onGeneratePlan: _generateDailyPlan,
         );
     }
   }
@@ -599,6 +609,121 @@ class _FocusFlowShellState extends State<FocusFlowShell>
     });
     await repository.saveTask(task);
     await _scheduleReminder(task);
+  }
+
+  Future<void> _importCourses() async {
+    final input = await showDialog<String>(
+      context: context,
+      builder: (context) => const _CourseImportDialog(),
+    );
+    if (!mounted || input == null || input.trim().isEmpty) return;
+    try {
+      final drafts = const CourseScheduleParser().parseJson(input);
+      await _confirmAndImportCourses(drafts);
+    } on FormatException catch (error) {
+      if (mounted) _showMessage(error.message);
+    } on Object {
+      if (mounted) _showMessage('课表导入失败，请检查格式。');
+    }
+  }
+
+  Future<void> _importCourseScreenshot() async {
+    try {
+      final text = await CourseImageOcr().pickAndRecognize();
+      if (!mounted || text == null || text.trim().isEmpty) return;
+      final drafts = const CourseScheduleParser().parseText(text);
+      await _confirmAndImportCourses(drafts);
+    } on FormatException catch (error) {
+      if (mounted) _showMessage(error.message);
+    } on Object {
+      if (mounted) _showMessage('截图识别失败，请确认图片清晰后重试。');
+    }
+  }
+
+  Future<void> _confirmAndImportCourses(List<CourseDraft> drafts) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => _CourseDraftReviewDialog(drafts: drafts),
+    );
+    if (!mounted || confirmed != true) return;
+    try {
+      final today = DateTime.now();
+      final nextMonday = DateTime(today.year, today.month, today.day)
+          .subtract(Duration(days: today.weekday - 1));
+      final imported = <PlannerTask>[];
+      for (final draft in drafts) {
+        final firstWeek = (draft.firstWeek ?? 1) - 1;
+        final lastWeek = draft.lastWeek ?? 16;
+        for (var week = firstWeek; week < lastWeek; week++) {
+          final date = nextMonday.add(Duration(days: draft.weekday - 1 + week * 7));
+          final start = DateTime.utc(date.year, date.month, date.day,
+                  draft.startMinute ~/ 60, draft.startMinute % 60)
+              .subtract(const Duration(hours: 8));
+          final end = DateTime.utc(date.year, date.month, date.day,
+                  draft.endMinute ~/ 60, draft.endMinute % 60)
+              .subtract(const Duration(hours: 8));
+          imported.add(PlannerTask(
+            id: 'course-${date.toIso8601String()}-${draft.name}-${draft.startMinute}',
+            title: draft.name,
+            kind: ScheduleItemKind.course,
+            location: draft.location,
+            startAt: start,
+            endAt: end,
+            timeZoneId: 'Asia/Shanghai',
+            reminderMinutes: 5,
+            recurrence: TaskRecurrence.none,
+          ));
+        }
+      }
+      for (final task in imported) {
+        await repository.saveTask(task);
+      }
+      await _scheduleImportedReminders(imported);
+      await _loadData(generation: _authGeneration);
+      if (mounted) _showMessage('已导入 ${drafts.length} 门课程，生成对应周次课表。');
+    } on Object {
+      if (mounted) _showMessage('课表保存失败，请稍后重试。');
+    }
+  }
+
+  Future<void> _scheduleImportedReminders(Iterable<PlannerTask> imported) async {
+    final reminders = imported.where(_shouldScheduleReminder).toList(growable: false);
+    if (reminders.isEmpty) return;
+    try {
+      final granted = await scheduler.requestPermissions();
+      if (!granted) {
+        if (mounted) _showMessage('请在系统设置中允许通知，课程提醒才能显示。');
+        return;
+      }
+      for (final task in reminders) {
+        await scheduler.schedule(task);
+      }
+    } on Object {
+      if (mounted) _showMessage('课程提醒创建失败，请检查通知权限。');
+    }
+  }
+
+  Future<void> _generateDailyPlan() async {
+    final generated = const DailyPlanner().generate(
+      day: DateTime.now(),
+      existing: tasks,
+      targetMinutes: 120,
+    );
+    if (generated.isEmpty) {
+      if (mounted) _showMessage('今天没有足够的连续空闲时间生成专注计划。');
+      return;
+    }
+    final confirmed = await showDialog<List<PlannerTask>>(
+      context: context,
+      builder: (context) => _DailyPlanReviewDialog(drafts: generated),
+    );
+    if (!mounted || confirmed == null || confirmed.isEmpty) return;
+    for (final task in confirmed) {
+      await repository.saveTask(task);
+      await _scheduleReminder(task);
+    }
+    await _loadData(generation: _authGeneration);
+    if (mounted) _showMessage('已确认并加入 ${confirmed.length} 个今日专注时间段。');
   }
 
   Future<void> _editTask(PlannerTask task) async {
@@ -885,6 +1010,188 @@ class _NoteDialogState extends State<_NoteDialog> {
   }
 }
 
+class _CourseImportDialog extends StatefulWidget {
+  const _CourseImportDialog();
+
+  @override
+  State<_CourseImportDialog> createState() => _CourseImportDialogState();
+}
+
+class _CourseImportDialogState extends State<_CourseImportDialog> {
+  final controller = TextEditingController();
+
+  @override
+  void dispose() {
+    controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('导入课表'),
+      content: SizedBox(
+        width: 520,
+        child: TextField(
+          controller: controller,
+          minLines: 8,
+          maxLines: 14,
+          decoration: const InputDecoration(
+            labelText: '粘贴截图 OCR 结果或 JSON',
+            hintText: '周一 高等数学 08:00-09:40 A203',
+            alignLabelWithHint: true,
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('取消')),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, controller.text),
+          child: const Text('解析并导入'),
+        ),
+      ],
+    );
+  }
+}
+
+class _CourseDraftReviewDialog extends StatelessWidget {
+  const _CourseDraftReviewDialog({required this.drafts});
+
+  final List<CourseDraft> drafts;
+
+  @override
+  Widget build(BuildContext context) {
+    const weekdays = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+    String clock(int minute) =>
+        '${(minute ~/ 60).toString().padLeft(2, '0')}:${(minute % 60).toString().padLeft(2, '0')}';
+    return AlertDialog(
+      title: Text('确认导入 ${drafts.length} 门课程'),
+      content: SizedBox(
+        width: 520,
+        child: ListView.builder(
+          shrinkWrap: true,
+          itemCount: drafts.length,
+          itemBuilder: (context, index) {
+            final draft = drafts[index];
+            return ListTile(
+              leading: const Icon(Icons.school_outlined),
+              title: Text(draft.name),
+              subtitle: Text(
+                '${weekdays[draft.weekday - 1]} ${clock(draft.startMinute)}-${clock(draft.endMinute)}'
+                '${draft.location.isEmpty ? '' : ' · ${draft.location}'}',
+              ),
+            );
+          },
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')),
+        FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('确认导入')),
+      ],
+    );
+  }
+}
+
+class _DailyPlanReviewDialog extends StatefulWidget {
+  const _DailyPlanReviewDialog({required this.drafts});
+
+  final List<PlannerTask> drafts;
+
+  @override
+  State<_DailyPlanReviewDialog> createState() => _DailyPlanReviewDialogState();
+}
+
+class _DailyPlanReviewDialogState extends State<_DailyPlanReviewDialog> {
+  late final List<PlannerTask> drafts = [...widget.drafts];
+
+  bool get hasOverlap {
+    final sorted = [...drafts]..sort((a, b) => a.startAt.compareTo(b.startAt));
+    for (var index = 1; index < sorted.length; index++) {
+      if (sorted[index].startAt.isBefore(sorted[index - 1].endAt)) return true;
+    }
+    return false;
+  }
+
+  Future<void> _editDraft(int index) async {
+    final edited = await showDialog<PlannerTask>(
+      context: context,
+      builder: (context) => AddTaskDialog(original: drafts[index]),
+    );
+    if (!mounted || edited == null) return;
+    setState(() => drafts[index] = edited);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('确认今日计划'),
+      content: SizedBox(
+        width: 560,
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const Align(
+            alignment: Alignment.centerLeft,
+            child: Text('这是草稿，确认前可以编辑或删除时间段。'),
+          ),
+          const SizedBox(height: 12),
+          Flexible(
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: drafts.length,
+              itemBuilder: (context, index) {
+                final draft = drafts[index];
+                return ListTile(
+                  leading: const Icon(Icons.timer_outlined),
+                  title: Text(draft.title),
+                  subtitle: Text(_formatDraftTime(draft)),
+                  trailing: Wrap(children: [
+                    IconButton(
+                      tooltip: '编辑草稿',
+                      icon: const Icon(Icons.edit_outlined),
+                      onPressed: () => _editDraft(index),
+                    ),
+                    IconButton(
+                      tooltip: '删除草稿',
+                      icon: const Icon(Icons.delete_outline),
+                      onPressed: () => setState(() => drafts.removeAt(index)),
+                    ),
+                  ]),
+                );
+              },
+            ),
+          ),
+          if (hasOverlap)
+            const Padding(
+              padding: EdgeInsets.only(top: 8),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text('时间段存在重叠，请先编辑后再确认。',
+                    style: TextStyle(color: Colors.red)),
+              ),
+            ),
+        ]),
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(context), child: const Text('取消')),
+        FilledButton(
+          onPressed: drafts.isEmpty || hasOverlap
+              ? null
+              : () => Navigator.pop(context, [...drafts]),
+          child: const Text('确认加入今日计划'),
+        ),
+      ],
+    );
+  }
+
+  String _formatDraftTime(PlannerTask task) {
+    final start = task.startAt.toLocal();
+    final end = task.endAt.toLocal();
+    String clock(DateTime value) =>
+        '${value.hour.toString().padLeft(2, '0')}:${value.minute.toString().padLeft(2, '0')}';
+    return '${clock(start)} - ${clock(end)}';
+  }
+}
+
 class _TodayView extends StatelessWidget {
   const _TodayView(
       {required this.tasks,
@@ -895,7 +1202,10 @@ class _TodayView extends StatelessWidget {
       required this.onDelete,
       required this.onMarkTodayIncomplete,
       required this.courseRemindersEnabled,
-      required this.onCourseRemindersChanged});
+      required this.onCourseRemindersChanged,
+      required this.onImportCourses,
+      required this.onImportCourseScreenshot,
+      required this.onGeneratePlan});
 
   final List<PlannerTask> tasks;
   final bool isWide;
@@ -906,6 +1216,9 @@ class _TodayView extends StatelessWidget {
   final ValueChanged<PlannerTask> onMarkTodayIncomplete;
   final bool courseRemindersEnabled;
   final ValueChanged<bool> onCourseRemindersChanged;
+  final VoidCallback onImportCourses;
+  final VoidCallback onImportCourseScreenshot;
+  final VoidCallback onGeneratePlan;
 
   @override
   Widget build(BuildContext context) {
@@ -939,10 +1252,22 @@ class _TodayView extends StatelessWidget {
                           .headlineMedium
                           ?.copyWith(fontWeight: FontWeight.w700)),
                 ])),
-            IconButton(
-                tooltip: '添加任务',
-                onPressed: onAdd,
-                icon: const Icon(Icons.add_circle_outline, size: 30)),
+            PopupMenuButton<String>(
+              tooltip: '今日操作',
+              onSelected: (value) {
+                if (value == 'add') onAdd();
+                if (value == 'import') onImportCourses();
+                if (value == 'screenshot') onImportCourseScreenshot();
+                if (value == 'plan') onGeneratePlan();
+              },
+              itemBuilder: (context) => const [
+                PopupMenuItem(value: 'add', child: Text('添加安排')),
+                PopupMenuItem(value: 'screenshot', child: Text('从课表截图导入')),
+                PopupMenuItem(value: 'import', child: Text('导入课表识别结果')),
+                PopupMenuItem(value: 'plan', child: Text('生成今日计划')),
+              ],
+              icon: const Icon(Icons.add_circle_outline, size: 30),
+            ),
           ]),
           const SizedBox(height: 28),
           Row(children: [
@@ -1193,21 +1518,30 @@ class _EmptyTodayState extends StatelessWidget {
 }
 
 class _NewsView extends StatefulWidget {
-  const _NewsView({required this.isWide, this.client});
+  const _NewsView({required this.isWide, this.client, this.apiClient});
 
   final bool isWide;
   final GitHubDigestClient? client;
+  final FocusFlowClient? apiClient;
 
   @override
   State<_NewsView> createState() => _NewsViewState();
 }
 
 class _NewsViewState extends State<_NewsView> {
-  late Future<List<NewsItem>>? future = widget.client?.fetch();
+  late Future<List<NewsItem>>? future = _fetch();
+
+  Future<List<NewsItem>>? _fetch() =>
+      widget.apiClient?.fetchDailyNews() ?? widget.client?.fetch();
+
+  void _refresh() {
+    if (widget.apiClient == null && widget.client == null) return;
+    setState(() => future = _fetch());
+  }
 
   @override
   Widget build(BuildContext context) {
-    if (widget.client != null) {
+    if (widget.apiClient != null || widget.client != null) {
       return FutureBuilder<List<NewsItem>>(
         future: future,
         builder: (context, snapshot) {
@@ -1217,30 +1551,11 @@ class _NewsViewState extends State<_NewsView> {
           if (snapshot.hasError) return _digestError(context);
           final items = snapshot.data ?? const <NewsItem>[];
           if (items.isEmpty) return _digestEmpty(context);
-          return _digestList(context, items);
+          return _digestList(context, items.take(50).toList(growable: false));
         },
       );
     }
-    return _digestList(context, const [
-      NewsItem(
-          repositoryFullName: 'open-source/agent-patterns',
-          title: '以更低成本构建可靠的 Agent 工作流',
-          summary: '',
-          sourceUrl: 'https://github.com/open-source/agent-patterns',
-          tags: ['agent'],
-          stars: 2400,
-          forks: 0,
-          score: 0),
-      NewsItem(
-          repositoryFullName: 'community/local-models',
-          title: '本周值得关注的本地模型工具',
-          summary: '',
-          sourceUrl: 'https://github.com/community/local-models',
-          tags: ['llm'],
-          stars: 1800,
-          forks: 0,
-          score: 0),
-    ]);
+    return _digestEmpty(context);
   }
 
   Widget _digestList(BuildContext context, List<NewsItem> items) {
@@ -1249,14 +1564,22 @@ class _NewsViewState extends State<_NewsView> {
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 1120),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('AI 资讯',
-              style: Theme.of(context)
-                  .textTheme
-                  .headlineMedium
-                  ?.copyWith(fontWeight: FontWeight.w700)),
+          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+            Text('每日资讯',
+                style: Theme.of(context)
+                    .textTheme
+                    .headlineMedium
+                    ?.copyWith(fontWeight: FontWeight.w700)),
+            if (widget.apiClient != null || widget.client != null)
+              IconButton(
+                tooltip: '刷新资讯',
+                onPressed: _refresh,
+                icon: const Icon(Icons.refresh),
+              ),
+          ]),
           const SizedBox(height: 6),
-          const Text('每日从 GitHub 精选项目动态',
-              style: TextStyle(color: Colors.black54)),
+          Text('${items.length} 条精选项目动态',
+              style: const TextStyle(color: Colors.black54)),
           const SizedBox(height: 24),
           ...items.map((item) => _NewsItem(
               title: item.title,

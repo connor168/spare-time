@@ -101,4 +101,30 @@ void main() {
       'DELETE /api/device-tokens?token=token-1',
     ]);
   });
+
+  test('fetches at most fifty daily news items from the API', () async {
+    final client = FocusFlowApiClient(
+      baseUrl: Uri.parse('https://api.focusflow.test'),
+      request: (method, uri, headers, body) async {
+        expect(uri.path, '/api/news/daily');
+        expect(uri.queryParameters['limit'], '50');
+        return SupabaseResponse(200, jsonEncode({
+          'items': List.generate(51, (index) => {
+            'repository_full_name': 'owner/repo-$index',
+            'title': 'repo-$index',
+            'source_url': 'https://github.com/owner/repo-$index',
+            'tags': <String>[],
+            'stars': index,
+            'forks': 0,
+            'score': index,
+          }),
+        }));
+      },
+    )..setSession(const SupabaseSession(
+        accessToken: 'access', refreshToken: 'refresh', userId: 'user-1'));
+
+    final items = await client.fetchDailyNews();
+
+    expect(items, hasLength(50));
+  });
 }

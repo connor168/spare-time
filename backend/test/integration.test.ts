@@ -154,7 +154,7 @@ suite('Focus Flow API PostgreSQL integration', () => {
 });
 
 async function applyMigrations(pool: pg.Pool) {
-  for (const migration of ['001_initial.sql', '002_product_and_sync.sql']) {
+  for (const migration of ['001_initial.sql', '002_product_and_sync.sql', '003_news_digest.sql']) {
     await pool.query(await readFile(new URL(`../migrations/${migration}`, import.meta.url), 'utf8'));
   }
 }
@@ -170,6 +170,11 @@ function testConfig(databaseUrl: string): Config {
     accessTokenTtlSeconds: 900,
     wechatAppId: null,
     wechatAppSecret: null,
+    githubApiToken: null,
+    newsCronSecret: null,
+    fcmProjectId: null,
+    fcmClientEmail: null,
+    fcmPrivateKey: null,
   };
 }
 

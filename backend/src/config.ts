@@ -8,6 +8,11 @@ export type Config = {
   accessTokenTtlSeconds: number;
   wechatAppId: string | null;
   wechatAppSecret: string | null;
+  githubApiToken: string | null;
+  newsCronSecret: string | null;
+  fcmProjectId: string | null;
+  fcmClientEmail: string | null;
+  fcmPrivateKey: string | null;
 };
 
 function required(name: string): string {
@@ -39,6 +44,11 @@ export function loadConfig(env = process.env): Config {
     accessTokenTtlSeconds: ttl,
     wechatAppId: env.WECHAT_APP_ID?.trim() || null,
     wechatAppSecret: env.WECHAT_APP_SECRET?.trim() || null,
+    githubApiToken: env.GITHUB_API_TOKEN?.trim() || null,
+    newsCronSecret: env.NEWS_CRON_SECRET?.trim() || null,
+    fcmProjectId: env.FCM_PROJECT_ID?.trim() || null,
+    fcmClientEmail: env.FCM_CLIENT_EMAIL?.trim() || null,
+    fcmPrivateKey: env.FCM_PRIVATE_KEY?.replace(/\\n/g, '\n').trim() || null,
   };
 }
 

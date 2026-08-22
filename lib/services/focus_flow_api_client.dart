@@ -3,6 +3,7 @@ import 'dart:io';
 
 import '../domain/knowledge_note.dart';
 import '../domain/planner_task.dart';
+import '../domain/news_item.dart';
 import 'supabase_rest_client.dart';
 
 /// Client for the Focus Flow API hosted outside the Flutter application.
@@ -146,6 +147,20 @@ class FocusFlowApiClient extends SupabaseRestClient {
   Future<void> deleteMyAccount() async {
     await _sendApi('POST', '/api/account/delete', null, authorized: true);
     clearSession();
+  }
+
+  @override
+  Future<List<NewsItem>> fetchDailyNews() async {
+    final response = await _sendApi('GET', '/api/news/daily?limit=50', null,
+        authorized: true);
+    final items = response['items'];
+    if (items is! List) throw const FormatException('Daily news response is invalid.');
+    return items
+        .whereType<Map<String, dynamic>>()
+        .map(NewsItem.fromJson)
+        .where((item) => item.sourceUrl.isNotEmpty)
+        .take(50)
+        .toList(growable: false);
   }
 
   SupabaseSession _setSessionFromApi(Map<String, dynamic> json) {

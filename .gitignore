@@ -37,4 +37,5 @@ backend/secrets/
 .codex_flutter_appdata/
 .codex_flutter_localappdata/
 .codex_flutter_runtime/
+.codex_flutter_runtime_check/
 npm-cache/

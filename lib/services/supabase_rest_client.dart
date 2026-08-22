@@ -3,6 +3,7 @@ import 'dart:io';
 
 import '../domain/knowledge_note.dart';
 import '../domain/planner_task.dart';
+import '../domain/news_item.dart';
 import 'focus_flow_client.dart';
 
 typedef SupabaseRequest = Future<SupabaseResponse> Function(
@@ -79,6 +80,18 @@ class SupabaseRestClient implements FocusFlowClient {
   final SupabaseRequest _request;
   SupabaseSession? _session;
 
+  @override
+  Future<List<NewsItem>> fetchDailyNews() async {
+    final response = await _request('GET', url.resolve('/functions/v1/github-digest'),
+        {'apikey': anonKey, 'authorization': 'Bearer $anonKey'}, null);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw SupabaseApiException(response.statusCode, response.body);
+    }
+    final decoded = jsonDecode(response.body);
+    final items = decoded is Map<String, dynamic> ? decoded['items'] : null;
+    if (items is! List) return const [];
+    return items.whereType<Map<String, dynamic>>().map(NewsItem.fromJson).take(50).toList();
+  }
   @override
   SupabaseSession? get session => _session;
 

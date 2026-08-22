@@ -20,9 +20,13 @@ Flutter build.
 
 The initial implementation covers email auth, WeChat code exchange, JWT access
 tokens, rotating refresh tokens, logout, `/api/me`, CAS sync push/pull, device
-tokens, and account export/delete. PostgreSQL integration tests and production
-deployment are still required before enabling the Flutter client against a real
-database.
+tokens, account export/delete, and the daily GitHub digest. `npm run news:refresh`
+fetches up to 50 repositories, stores the current Asia/Shanghai digest, and
+sends optional FCM notifications to registered devices. Set `GITHUB_API_TOKEN`
+for higher GitHub API limits. FCM delivery is enabled only when all three
+`FCM_*` variables are configured. The server also exposes
+`POST /internal/news/refresh`, protected by `x-cron-secret`, for an ECS cron
+job; schedule it daily at 07:00 Asia/Shanghai.
 
 For a local PostgreSQL instance, `docker compose up -d postgres` is sufficient;
 apply migrations in order before starting the API. The `docker-compose.yml`
@@ -38,6 +42,13 @@ migrations, which must be run once per release before the API is started:
 docker compose -f docker-compose.production.yml build
 docker compose -f docker-compose.production.yml run --rm api npm run migrate
 docker compose -f docker-compose.production.yml up -d api
+```
+
+After the API is running, configure the host scheduler with:
+
+```text
+CRON_TZ=Asia/Shanghai
+0 7 * * * cd /opt/focus-flow/spare-time/backend && docker compose -f docker-compose.production.yml run --rm api node dist/refresh-news.js >> /var/log/focus-flow-news.log 2>&1
 ```
 
 Copy `.env.example` to `.env` only on the server, set the production database

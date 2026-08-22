@@ -141,6 +141,11 @@ ACCESS_TOKEN_TTL_SECONDS=900
 WECHAT_APP_ID=
 WECHAT_APP_SECRET=
 API_DOMAIN=api.你的域名
+GITHUB_API_TOKEN=可选的GitHub令牌
+NEWS_CRON_SECRET=新生成的定时任务密钥
+FCM_PROJECT_ID=Firebase项目ID
+FCM_CLIENT_EMAIL=Firebase服务账号邮箱
+FCM_PRIVATE_KEY=Firebase服务账号私钥（换行用\\n）
 ```
 
 生成 JWT 密钥：
@@ -154,6 +159,9 @@ openssl rand -hex 32
 ```bash
 chmod 600 .env
 ```
+
+ECS 的 crontab 需要先设置 `CRON_TZ=Asia/Shanghai`，再加入每日 07:00 的刷新命令，避免
+服务器默认使用 UTC 导致推送时间偏移。
 
 ## 第 7 步：构建、迁移、启动
 

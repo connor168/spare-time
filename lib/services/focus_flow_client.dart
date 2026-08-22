@@ -1,5 +1,6 @@
 import '../domain/knowledge_note.dart';
 import '../domain/planner_task.dart';
+import '../domain/news_item.dart';
 import 'supabase_rest_client.dart';
 
 /// Backend-neutral contract used by the Flutter application.
@@ -46,4 +47,6 @@ abstract interface class FocusFlowClient {
   Future<Map<String, dynamic>> exportMyData();
 
   Future<void> deleteMyAccount();
+
+  Future<List<NewsItem>> fetchDailyNews();
 }
